@@ -44,50 +44,50 @@ def register_oauth_tools(mcp):
             "redirect_uri": REDIRECT_URI
         }
 
-    @mcp.tool()
-    def oauth_complete_login(timeout: int = 300):
-        """Complete the OAuth login process by exchanging the authorization code for tokens.
+    # @mcp.tool()
+    # def oauth_complete_login(timeout: int = 300):
+    #     """Complete the OAuth login process by exchanging the authorization code for tokens.
 
-        This should be called after the user has visited the authorization URL
-        and been redirected back to the callback server.
+    #     This should be called after the user has visited the authorization URL
+    #     and been redirected back to the callback server.
 
-        Args:
-            timeout: Maximum seconds to wait for the authorization code (default: 300)
+    #     Args:
+    #         timeout: Maximum seconds to wait for the authorization code (default: 300)
 
-        Returns:
-            dict: Status of the login completion
-        """
-        logger.info(f"Waiting for authorization code (timeout: {timeout}s)...")
-        start_time = time.time()
+    #     Returns:
+    #         dict: Status of the login completion
+    #     """
+    #     logger.info(f"Waiting for authorization code (timeout: {timeout}s)...")
+    #     start_time = time.time()
 
-        while not oauth_state.auth_code and (time.time() - start_time) < timeout:
-            time.sleep(1)
+    #     while not oauth_state.auth_code and (time.time() - start_time) < timeout:
+    #         time.sleep(1)
 
-        if not oauth_state.auth_code:
-            return {
-                "status": "timeout",
-                "error": f"No authorization code received within {timeout} seconds",
-                "suggestion": "Please call oauth_start_login() again and complete the browser authorization"
-            }
+    #     if not oauth_state.auth_code:
+    #         return {
+    #             "status": "timeout",
+    #             "error": f"No authorization code received within {timeout} seconds",
+    #             "suggestion": "Please call oauth_start_login() again and complete the browser authorization"
+    #         }
 
-        try:
-            token_data = exchange_code_for_token(oauth_state.auth_code)
+    #     try:
+    #         token_data = exchange_code_for_token(oauth_state.auth_code)
 
-            oauth_state.auth_code = None
-            oauth_state.auth_state = None
+    #         oauth_state.auth_code = None
+    #         oauth_state.auth_state = None
 
-            return {
-                "status": "success",
-                "message": "Successfully authenticated with DigiKey",
-                "token_type": token_data.get("token_type"),
-                "expires_in": token_data.get("expires_in"),
-                "has_refresh_token": oauth_state.refresh_token is not None
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+    #         return {
+    #             "status": "success",
+    #             "message": "Successfully authenticated with DigiKey",
+    #             "token_type": token_data.get("token_type"),
+    #             "expires_in": token_data.get("expires_in"),
+    #             "has_refresh_token": oauth_state.refresh_token is not None
+    #         }
+    #     except Exception as e:
+    #         return {
+    #             "status": "error",
+    #             "error": str(e)
+    #         }
 
     @mcp.tool()
     def oauth_status():

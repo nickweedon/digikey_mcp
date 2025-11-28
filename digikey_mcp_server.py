@@ -28,7 +28,7 @@ logger.info("=== SERVER READY ===")
 
 def main():
     """Main entry point for the MCP server."""
-    auto_launch_oauth_if_needed()
+    #auto_launch_oauth_if_needed()
     mcp.run()
 
 

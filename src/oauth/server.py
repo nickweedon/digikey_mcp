@@ -98,7 +98,7 @@ def start_oauth_server():
 
     def run_server():
         try:
-            oauth_state.http_server = HTTPServer(('localhost', OAUTH_PORT), OAuthCallbackHandler)
+            oauth_state.http_server = HTTPServer(('0.0.0.0', OAUTH_PORT), OAuthCallbackHandler)
 
             if not SSL_CERT_FILE.exists() or not SSL_KEY_FILE.exists():
                 logger.error(f"SSL certificate files not found: {SSL_CERT_FILE}, {SSL_KEY_FILE}")
