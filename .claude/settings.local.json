@@ -6,7 +6,8 @@
       "Bash(uv run python:*)",
       "Bash(openssl req:*)",
       "Bash(tree:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "WebFetch(domain:developer.digikey.com)"
     ],
     "deny": [],
     "ask": []
