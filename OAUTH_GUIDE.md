@@ -62,16 +62,42 @@ oauth_logout()
 CLIENT_ID=your_client_id
 CLIENT_SECRET=your_client_secret
 USE_SANDBOX=false
-REDIRECT_URI=http://localhost:8139/callback
+REDIRECT_URI=https://localhost:8139/callback
 OAUTH_PORT=8139
 AUTH_CODE_FILE=.digikey_auth_code
+SSL_CERT_FILE=localhost-cert.pem
+SSL_KEY_FILE=localhost-key.pem
 ```
+
+## SSL Certificate Setup
+
+The server uses HTTPS for the OAuth callback endpoint. SSL certificates are required:
+
+### Generate Self-Signed Certificate (for development):
+```bash
+openssl req -x509 -newkey rsa:4096 -nodes \
+  -keyout localhost-key.pem \
+  -out localhost-cert.pem \
+  -days 365 \
+  -subj "/CN=localhost" \
+  -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+### Browser Security Warning
+When you complete OAuth authorization, your browser will show a security warning because of the self-signed certificate. This is **normal and expected**. You need to:
+1. Click "Advanced" or "Show Details"
+2. Click "Proceed to localhost" or "Accept the Risk"
+3. The callback will then complete successfully
+
+### Production Deployment
+For production, use a proper SSL certificate from a trusted Certificate Authority (CA) instead of a self-signed certificate.
 
 ## Security
 
-- Add `.digikey_auth_code` to `.gitignore`
-- File permissions: `chmod 600 .digikey_auth_code`
-- Logout clears both tokens and file
+- Add `.digikey_auth_code` and `*.pem` files to `.gitignore`
+- File permissions: `chmod 600 .digikey_auth_code localhost-key.pem`
+- Logout clears both tokens and auth code file
+- SSL certificate files should not be committed to version control
 
 ## Troubleshooting
 

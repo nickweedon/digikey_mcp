@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(printenv:*)",
+      "Bash(python test_mylists.py:*)",
+      "Bash(uv run python:*)",
+      "Bash(openssl req:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

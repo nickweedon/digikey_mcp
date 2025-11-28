@@ -29,7 +29,15 @@ USE_SANDBOX=false
 
 Set `USE_SANDBOX=true` to use DigiKey's sandbox environment for testing.
 
-### 3. Run the server
+### 3. Generate SSL certificates for OAuth (HTTPS callback)
+For MyLists API access, you need to generate SSL certificates for the HTTPS callback endpoint:
+```bash
+openssl req -x509 -newkey rsa:4096 -nodes -keyout localhost-key.pem -out localhost-cert.pem -days 365 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+
+**Note:** When completing OAuth authorization, your browser will show a security warning about the self-signed certificate. This is normal - click "Advanced" and "Proceed to localhost" to continue.
+
+### 4. Run the server
 ```bash
 uv run python digikey_mcp_server.py
 ```

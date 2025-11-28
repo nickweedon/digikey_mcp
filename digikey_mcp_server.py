@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import secrets
+import ssl
 import threading
 import urllib.parse
 import webbrowser
@@ -24,8 +25,10 @@ load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 USE_SANDBOX = os.getenv("USE_SANDBOX", "true").lower() == "true"
-REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8139/callback")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://localhost:8139/callback")
 OAUTH_PORT = int(os.getenv("OAUTH_PORT", "8139"))
+SSL_CERT_FILE = Path(os.getenv("SSL_CERT_FILE", "localhost-cert.pem"))
+SSL_KEY_FILE = Path(os.getenv("SSL_KEY_FILE", "localhost-key.pem"))
 
 print(f"=== Using {'SANDBOX' if USE_SANDBOX else 'PRODUCTION'} environment ===")
 
@@ -230,15 +233,33 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         logger.debug(f"OAuth callback server: {format % args}")
 
 def start_oauth_server():
-    """Start the OAuth callback HTTP server in a background thread."""
+    """Start the OAuth callback HTTPS server in a background thread."""
     if oauth_state.server_thread and oauth_state.server_thread.is_alive():
         logger.info("OAuth callback server already running")
         return
 
     def run_server():
         try:
+            # Create HTTP server
             oauth_state.http_server = HTTPServer(('localhost', OAUTH_PORT), OAuthCallbackHandler)
-            logger.info(f"✓ OAuth callback server started on http://localhost:{OAUTH_PORT}")
+
+            # Check if SSL certificate files exist
+            if not SSL_CERT_FILE.exists() or not SSL_KEY_FILE.exists():
+                logger.error(f"SSL certificate files not found: {SSL_CERT_FILE}, {SSL_KEY_FILE}")
+                logger.error("Please generate SSL certificates using:")
+                logger.error('openssl req -x509 -newkey rsa:4096 -nodes -keyout localhost-key.pem -out localhost-cert.pem -days 365 -subj "/CN=localhost"')
+                raise FileNotFoundError("SSL certificate files not found")
+
+            # Wrap with SSL
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(certfile=str(SSL_CERT_FILE), keyfile=str(SSL_KEY_FILE))
+            oauth_state.http_server.socket = ssl_context.wrap_socket(
+                oauth_state.http_server.socket,
+                server_side=True
+            )
+
+            logger.info(f"✓ OAuth callback server started on https://localhost:{OAUTH_PORT}")
+            logger.info("⚠️  Using self-signed certificate - browser will show security warning (this is normal)")
             oauth_state.http_server.serve_forever()
         except Exception as e:
             logger.error(f"OAuth callback server error: {e}")
@@ -247,7 +268,7 @@ def start_oauth_server():
     oauth_state.server_thread.start()
 
 def stop_oauth_server():
-    """Stop the OAuth callback HTTP server."""
+    """Stop the OAuth callback HTTPS server."""
     if oauth_state.http_server:
         oauth_state.http_server.shutdown()
         logger.info("OAuth callback server stopped")
@@ -594,29 +615,33 @@ def _require_user_auth():
         return
 
     # No saved auth code, trigger auto-launch
-    logger.info("No saved authentication. Triggering OAuth flow...")
-    auto_launch_oauth_if_needed()
-
-    # Wait for user to complete auth (with timeout)
-    logger.info("Waiting for user to complete browser authentication...")
-    timeout = 300  # 5 minutes
-    start_time = time.time()
-
-    while not oauth_state.auth_code and (time.time() - start_time) < timeout:
-        time.sleep(1)
-
-    if not oauth_state.auth_code:
-        raise ValueError(
-            "OAuth authentication timed out. "
-            "Please complete the browser authorization within 5 minutes."
+    logger.info("No saved authentication. Authenticate at http://localhost:8139")
+    raise ValueError(
+            "No Authentication code, Authenticate at http://localhost:8139."
+            "No Authentication code, Authenticate at http://localhost:8139."
         )
 
-    # Exchange the auth code for tokens
-    try:
-        exchange_code_for_token(oauth_state.auth_code)
-        logger.info("✓ User authenticated successfully")
-    except Exception as e:
-        raise ValueError(f"Failed to complete authentication: {e}")
+
+    # # Wait for user to complete auth (with timeout)
+    # logger.info("Waiting for user to complete browser authentication...")
+    # timeout = 300  # 5 minutes
+    # start_time = time.time()
+
+    # while not oauth_state.auth_code and (time.time() - start_time) < timeout:
+    #     time.sleep(1)
+
+    # if not oauth_state.auth_code:
+    #     raise ValueError(
+    #         "OAuth authentication timed out. "
+    #         "Please complete the browser authorization within 5 minutes."
+    #     )
+
+    # # Exchange the auth code for tokens
+    # try:
+    #     exchange_code_for_token(oauth_state.auth_code)
+    #     logger.info("✓ User authenticated successfully")
+    # except Exception as e:
+    #     raise ValueError(f"Failed to complete authentication: {e}")
 
 # ============================================================================
 # Initialize Server
@@ -1046,6 +1071,7 @@ async def delete_part_from_list(list_id: int, part_id: int, customer_id: str = "
 
 
 def main():
+    auto_launch_oauth_if_needed()
     mcp.run()
 
 if __name__ == "__main__":

@@ -5,6 +5,14 @@ test_client.py
 .env.local
 .env.*.local
 
+# OAuth authentication
+.digikey_auth_code
+
+# SSL certificates
+*.pem
+localhost-cert.pem
+localhost-key.pem
+
 /.gitkeep
 
 # Python

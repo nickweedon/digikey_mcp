@@ -49,7 +49,7 @@ def get_access_token():
 
 def get_all_lists(access_token, customer_id="0"):
     """Get all MyLists for the user."""
-    url = f"{API_BASE}/mylists/v2/Lists"
+    url = f"{API_BASE}/mylists/v1/lists"
 
     headers = {
         "Authorization": f"Bearer {access_token}",
