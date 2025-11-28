@@ -40,7 +40,7 @@ def register_product_tools(mcp):
                 "SortOrder": sort_order
             }
 
-        return _make_request("POST", url, headers, body)
+        return _make_request("POST", url, headers, body, use_user_token=False)
 
     @mcp.tool()
     def product_details(product_number: str, manufacturer_id: str = None, customer_id: str = "0"):
@@ -61,21 +61,21 @@ def register_product_tools(mcp):
         if params:
             url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
 
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def search_manufacturers():
         """Search and retrieve all product manufacturers."""
         url = f"{API_BASE}/products/v4/search/manufacturers"
         headers = _get_headers()
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def search_categories():
         """Search and retrieve all product categories."""
         url = f"{API_BASE}/products/v4/search/categories"
         headers = _get_headers()
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def get_category_by_id(category_id: int):
@@ -86,7 +86,7 @@ def register_product_tools(mcp):
         """
         url = f"{API_BASE}/products/v4/search/categories/{category_id}"
         headers = _get_headers()
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def search_product_substitutions(product_number: str, limit: int = 10, search_options: str = None, exclude_marketplace: bool = False):
@@ -106,7 +106,7 @@ def register_product_tools(mcp):
             params["searchOptionList"] = search_options
 
         url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def get_product_media(product_number: str):
@@ -117,7 +117,7 @@ def register_product_tools(mcp):
         """
         url = f"{API_BASE}/products/v4/search/{product_number}/media"
         headers = _get_headers()
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def get_product_pricing(product_number: str, customer_id: str = "0", requested_quantity: int = 1):
@@ -134,7 +134,7 @@ def register_product_tools(mcp):
         params = {"requestedQuantity": requested_quantity}
         url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
 
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
     def get_digi_reel_pricing(product_number: str, requested_quantity: int, customer_id: str = "0"):
@@ -151,4 +151,4 @@ def register_product_tools(mcp):
         params = {"requestedQuantity": requested_quantity}
         url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
 
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=False)

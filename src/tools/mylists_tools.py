@@ -23,7 +23,7 @@ def register_mylists_tools(mcp):
         _require_user_auth()
         url = f"{API_BASE}/mylists/v1/lists"
         headers = _get_headers(customer_id, use_user_token=True)
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
     def create_list(list_name: str, notes: str = None, customer_id: str = "0"):
@@ -47,7 +47,7 @@ def register_mylists_tools(mcp):
         if notes:
             body["notes"] = notes
 
-        return _make_request("POST", url, headers, body)
+        return _make_request("POST", url, headers, body, use_user_token=True)
 
     @mcp.tool()
     def get_list_by_id(list_id: int, include_parts: bool = False, customer_id: str = "0"):
@@ -70,7 +70,7 @@ def register_mylists_tools(mcp):
         if include_parts:
             url += "?includePartsList=true"
 
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
     def update_list_name(list_id: int, new_name: str, customer_id: str = "0"):
@@ -91,7 +91,7 @@ def register_mylists_tools(mcp):
         headers = _get_headers(customer_id, use_user_token=True)
 
         body = {"listName": new_name}
-        return _make_request("PUT", url, headers, body)
+        return _make_request("PUT", url, headers, body, use_user_token=True)
 
     @mcp.tool()
     async def delete_list(list_id: int, customer_id: str = "0", ctx=None):
@@ -125,7 +125,7 @@ def register_mylists_tools(mcp):
         url = f"{API_BASE}/mylists/v1/lists/{list_id}"
         headers = _get_headers(customer_id, use_user_token=True)
 
-        return _make_request("DELETE", url, headers)
+        return _make_request("DELETE", url, headers, use_user_token=True)
 
     @mcp.tool()
     def get_parts_by_list_id(list_id: int, start_index: int = None, limit: int = None, customer_id: str = "0"):
@@ -155,7 +155,7 @@ def register_mylists_tools(mcp):
         if params:
             url += "?" + "&".join(params)
 
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
     def add_parts_to_list(list_id: int, parts: str, customer_id: str = "0"):
@@ -180,7 +180,7 @@ def register_mylists_tools(mcp):
 
         body = {"parts": parts_data}
 
-        return _make_request("POST", url, headers, body)
+        return _make_request("POST", url, headers, body, use_user_token=True)
 
     @mcp.tool()
     def get_part_from_list(list_id: int, part_id: int, customer_id: str = "0"):
@@ -200,7 +200,7 @@ def register_mylists_tools(mcp):
         url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
         headers = _get_headers(customer_id, use_user_token=True)
 
-        return _make_request("GET", url, headers)
+        return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
     def update_part_in_list(list_id: int, part_id: int, part_data: str, customer_id: str = "0"):
@@ -224,7 +224,7 @@ def register_mylists_tools(mcp):
 
         data = json.loads(part_data) if isinstance(part_data, str) else part_data
 
-        return _make_request("PUT", url, headers, data)
+        return _make_request("PUT", url, headers, data, use_user_token=True)
 
     @mcp.tool()
     async def delete_part_from_list(list_id: int, part_id: int, customer_id: str = "0", ctx=None):
@@ -258,4 +258,4 @@ def register_mylists_tools(mcp):
         url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
         headers = _get_headers(customer_id, use_user_token=True)
 
-        return _make_request("DELETE", url, headers)
+        return _make_request("DELETE", url, headers, use_user_token=True)
