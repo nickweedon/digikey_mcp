@@ -50,7 +50,7 @@ def register_mylists_tools(mcp):
         return _make_request("POST", url, headers, body, use_user_token=True)
 
     @mcp.tool()
-    def get_list_by_id(list_id: int, include_parts: bool = False, customer_id: str = "0"):
+    def get_list_by_id(list_id: str, include_parts: bool = False, customer_id: str = "0"):
         """Get detailed information about a specific list.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -73,7 +73,7 @@ def register_mylists_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
-    def update_list_name(list_id: int, new_name: str, customer_id: str = "0"):
+    def update_list_name(list_id: str, new_name: str, customer_id: str = "0"):
         """Update the name of an existing list.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -94,7 +94,7 @@ def register_mylists_tools(mcp):
         return _make_request("PUT", url, headers, body, use_user_token=True)
 
     @mcp.tool()
-    async def delete_list(list_id: int, customer_id: str = "0", ctx=None):
+    async def delete_list(list_id: str, customer_id: str = "0", ctx=None):
         """⚠️ DESTRUCTIVE: Permanently delete a list and all its contents.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -128,7 +128,7 @@ def register_mylists_tools(mcp):
         return _make_request("DELETE", url, headers, use_user_token=True)
 
     @mcp.tool()
-    def get_parts_by_list_id(list_id: int, start_index: int = None, limit: int = None, customer_id: str = "0"):
+    def get_parts_by_list_id(list_id: str, start_index: int = None, limit: int = None, customer_id: str = "0"):
         """Get all parts from a specific list with optional pagination.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -158,7 +158,7 @@ def register_mylists_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
-    def add_parts_to_list(list_id: int, parts: str, customer_id: str = "0"):
+    def add_parts_to_list(list_id: str, parts: str, customer_id: str = "0"):
         """Add parts to a list.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -183,7 +183,7 @@ def register_mylists_tools(mcp):
         return _make_request("POST", url, headers, body, use_user_token=True)
 
     @mcp.tool()
-    def get_part_from_list(list_id: int, part_id: int, customer_id: str = "0"):
+    def get_part_from_list(list_id: str, part_id: str, customer_id: str = "0"):
         """Get a specific part from a list by its part ID.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -203,7 +203,7 @@ def register_mylists_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=True)
 
     @mcp.tool()
-    def update_part_in_list(list_id: int, part_id: int, part_data: str, customer_id: str = "0"):
+    def update_part_in_list(list_id: str, part_id: str, part_data: str, customer_id: str = "0"):
         """Update part information in a list.
 
         ⚠️ Requires user authentication via oauth_start_login()
@@ -227,7 +227,7 @@ def register_mylists_tools(mcp):
         return _make_request("PUT", url, headers, data, use_user_token=True)
 
     @mcp.tool()
-    async def delete_part_from_list(list_id: int, part_id: int, customer_id: str = "0", ctx=None):
+    async def delete_part_from_list(list_id: str, part_id: str, customer_id: str = "0", ctx=None):
         """⚠️ DESTRUCTIVE: Permanently delete a part from a list.
 
         ⚠️ Requires user authentication via oauth_start_login()

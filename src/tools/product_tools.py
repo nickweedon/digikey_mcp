@@ -78,7 +78,7 @@ def register_product_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def get_category_by_id(category_id: int):
+    def get_category_by_id(category_id: str):
         """Get specific category details by ID.
 
         Args:
