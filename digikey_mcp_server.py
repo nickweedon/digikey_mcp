@@ -223,7 +223,7 @@ def get_product_pricing(product_number: str, customer_id: str = "0", requested_q
 @mcp.tool()
 def get_digi_reel_pricing(product_number: str, requested_quantity: int, customer_id: str = "0"):
     """Get DigiReel pricing for a product.
-    
+
     Args:
         product_number: DigiKey product number (must be DigiReel compatible)
         requested_quantity: Quantity for DigiReel pricing
@@ -231,11 +231,485 @@ def get_digi_reel_pricing(product_number: str, requested_quantity: int, customer
     """
     url = f"{API_BASE}/products/v4/search/{product_number}/digireelpricing"
     headers = _get_headers(customer_id)
-    
+
     params = {"requestedQuantity": requested_quantity}
     url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
-    
+
     return _make_request("GET", url, headers)
+
+# ============================================================================
+# MyLists API Methods
+# ============================================================================
+
+@mcp.tool()
+def get_all_lists(customer_id: str = "0"):
+    """Get all MyLists for the user.
+
+    Args:
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        List of all user's lists with metadata
+    """
+    url = f"{API_BASE}/mylists/v2/Lists"
+    headers = _get_headers(customer_id)
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def create_list(list_name: str, notes: str = None, customer_id: str = "0"):
+    """Create a new MyList.
+
+    Args:
+        list_name: Name for the new list (required)
+        notes: Optional notes/description for the list
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Created list information including list_id
+    """
+    url = f"{API_BASE}/mylists/v2/CreateList"
+    headers = _get_headers(customer_id)
+
+    body = {"ListName": list_name}
+    if notes:
+        body["Notes"] = notes
+
+    return _make_request("POST", url, headers, body)
+
+@mcp.tool()
+def get_list_by_id(list_id: int, include_parts: bool = False, customer_id: str = "0"):
+    """Get detailed information about a specific list.
+
+    Args:
+        list_id: The list ID to retrieve
+        include_parts: Whether to include the parts list in response (default: False)
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Detailed list information and optionally parts data
+    """
+    url = f"{API_BASE}/mylists/v2/GetListByListId"
+    headers = _get_headers(customer_id)
+
+    params = {"listId": list_id, "includePartsList": str(include_parts).lower()}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def update_list_name(list_id: int, new_name: str, customer_id: str = "0"):
+    """Update the name of an existing list.
+
+    Args:
+        list_id: The list ID to update
+        new_name: New name for the list
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Updated list information
+    """
+    url = f"{API_BASE}/mylists/v2/UpdateListName"
+    headers = _get_headers(customer_id)
+
+    body = {"ListId": list_id, "ListName": new_name}
+    return _make_request("PUT", url, headers, body)
+
+@mcp.tool()
+def is_valid_list_name(list_name: str, customer_id: str = "0"):
+    """Check if a list name is valid (not already in use).
+
+    Args:
+        list_name: The name to validate
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Boolean indicating if the name is available
+    """
+    url = f"{API_BASE}/mylists/v2/IsValidListName"
+    headers = _get_headers(customer_id)
+
+    params = {"listName": list_name}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def get_valid_list_name(list_name: str, customer_id: str = "0"):
+    """Get a valid list name (adds number suffix if name exists).
+
+    Args:
+        list_name: The desired list name
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        A valid list name (original or with number suffix)
+    """
+    url = f"{API_BASE}/mylists/v2/ValidListName"
+    headers = _get_headers(customer_id)
+
+    params = {"listName": list_name}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+async def delete_list(list_id: int, customer_id: str = "0", ctx=None):
+    """⚠️ DESTRUCTIVE: Permanently delete a list and all its contents.
+
+    This operation cannot be undone. The list and all associated parts,
+    settings, and metadata will be permanently removed.
+
+    This tool will prompt for user confirmation before proceeding.
+
+    Args:
+        list_id: The list ID to delete
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Deletion confirmation response
+    """
+    # Request user confirmation
+    result = await ctx.elicit(
+        f"⚠️ WARNING: You are about to permanently delete list ID {list_id} and ALL its contents. "
+        "This action CANNOT be undone. Do you want to proceed?",
+        response_type=None
+    )
+
+    if result.action != "accept":
+        raise ValueError(f"List deletion cancelled by user (action: {result.action})")
+
+    url = f"{API_BASE}/mylists/v2/DeleteList"
+    headers = _get_headers(customer_id)
+
+    params = {"listId": list_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("DELETE", url, headers)
+
+# Parts Management Methods
+
+@mcp.tool()
+def get_parts_by_list_id(list_id: int, start_index: int = None, count: int = None, customer_id: str = "0"):
+    """Get all parts from a specific list with optional pagination.
+
+    Args:
+        list_id: The list ID to get parts from
+        start_index: Optional starting index for pagination
+        count: Optional number of parts to return
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        List of parts with details including pricing, availability, etc.
+    """
+    url = f"{API_BASE}/mylists/v2/GetPartsByListId"
+    headers = _get_headers(customer_id)
+
+    params = {"listId": list_id}
+    if start_index is not None:
+        params["startIndex"] = start_index
+    if count is not None:
+        params["numberOfParts"] = count
+
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def add_parts_to_list(list_id: int, parts: str, customer_id: str = "0"):
+    """Add parts to a list.
+
+    Args:
+        list_id: The list ID to add parts to
+        parts: JSON string containing parts data. Example format:
+               '[{"DigiKeyPartNumber": "296-8875-1-ND", "Quantity": 10, "CustomerReference": "R1"}]'
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Response with added parts information
+    """
+    url = f"{API_BASE}/mylists/v2/AddPartsToListId"
+    headers = _get_headers(customer_id)
+
+    # Parse the JSON string
+    parts_data = json.loads(parts) if isinstance(parts, str) else parts
+
+    body = {
+        "ListId": list_id,
+        "Parts": parts_data
+    }
+
+    return _make_request("POST", url, headers, body)
+
+@mcp.tool()
+def get_part_from_list(list_id: int, unique_id: str, customer_id: str = "0"):
+    """Get a specific part from a list by its unique ID.
+
+    Args:
+        list_id: The list ID
+        unique_id: The unique ID of the part in the list
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Detailed part information
+    """
+    url = f"{API_BASE}/mylists/v2/GetPartFromListByUniqueId"
+    headers = _get_headers(customer_id)
+
+    params = {"listId": list_id, "uniqueId": unique_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def update_part_in_list(list_id: int, unique_id: str, part_data: str, customer_id: str = "0"):
+    """Update part information in a list.
+
+    Args:
+        list_id: The list ID
+        unique_id: The unique ID of the part to update
+        part_data: JSON string with updated part data. Example:
+                   '{"Quantity": 20, "CustomerReference": "R1-Updated"}'
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Updated part information
+    """
+    url = f"{API_BASE}/mylists/v2/UpdatePartFromListByUniqueId"
+    headers = _get_headers(customer_id)
+
+    # Parse the JSON string
+    data = json.loads(part_data) if isinstance(part_data, str) else part_data
+
+    body = {
+        "ListId": list_id,
+        "UniqueId": unique_id,
+        **data
+    }
+
+    return _make_request("PUT", url, headers, body)
+
+@mcp.tool()
+async def delete_part_from_list(list_id: int, unique_id: str, customer_id: str = "0", ctx=None):
+    """⚠️ DESTRUCTIVE: Permanently delete a part from a list.
+
+    This operation cannot be undone. The part will be permanently removed from the list.
+
+    This tool will prompt for user confirmation before proceeding.
+
+    Args:
+        list_id: The list ID
+        unique_id: The unique ID of the part to delete
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Deletion confirmation response
+    """
+    # Request user confirmation
+    result = await ctx.elicit(
+        f"⚠️ WARNING: You are about to permanently delete part '{unique_id}' from list ID {list_id}. "
+        "This action CANNOT be undone. Do you want to proceed?",
+        response_type=None
+    )
+
+    if result.action != "accept":
+        raise ValueError(f"Part deletion cancelled by user (action: {result.action})")
+
+    url = f"{API_BASE}/mylists/v2/DeletePartFromListByUniqueId"
+    headers = _get_headers(customer_id)
+
+    params = {"listId": list_id, "uniqueId": unique_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("DELETE", url, headers)
+
+# Tag Methods
+
+@mcp.tool()
+def create_tag(tag_name: str, customer_id: str = "0"):
+    """Create a new tag for organizing lists.
+
+    Args:
+        tag_name: Name for the new tag
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Created tag information
+    """
+    url = f"{API_BASE}/mylists/v2/CreateTag"
+    headers = _get_headers(customer_id)
+
+    body = {"TagName": tag_name}
+    return _make_request("POST", url, headers, body)
+
+@mcp.tool()
+async def delete_tag(tag_id: int, customer_id: str = "0", ctx=None):
+    """⚠️ DESTRUCTIVE: Permanently delete a tag.
+
+    This operation cannot be undone. The tag will be removed from all lists using it.
+
+    This tool will prompt for user confirmation before proceeding.
+
+    Args:
+        tag_id: The tag ID to delete
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Deletion confirmation response
+    """
+    # Request user confirmation
+    result = await ctx.elicit(
+        f"⚠️ WARNING: You are about to permanently delete tag ID {tag_id}. "
+        "This will remove the tag from ALL lists using it. This action CANNOT be undone. Do you want to proceed?",
+        response_type=None
+    )
+
+    if result.action != "accept":
+        raise ValueError(f"Tag deletion cancelled by user (action: {result.action})")
+
+    url = f"{API_BASE}/mylists/v2/DeleteTag"
+    headers = _get_headers(customer_id)
+
+    params = {"tagId": tag_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("DELETE", url, headers)
+
+# Revision Methods
+
+@mcp.tool()
+def create_revision(list_id: int, revision_name: str, customer_id: str = "0"):
+    """Create a new revision of a list.
+
+    Args:
+        list_id: The list ID to create a revision for
+        revision_name: Name for the revision
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Created revision information
+    """
+    url = f"{API_BASE}/mylists/v2/CreateRevision"
+    headers = _get_headers(customer_id)
+
+    body = {"ListId": list_id, "RevisionName": revision_name}
+    return _make_request("POST", url, headers, body)
+
+@mcp.tool()
+def get_revision_by_id(revision_id: int, customer_id: str = "0"):
+    """Get details of a specific revision.
+
+    Args:
+        revision_id: The revision ID to retrieve
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Revision details including parts list
+    """
+    url = f"{API_BASE}/mylists/v2/GetRevisionByRevisionId"
+    headers = _get_headers(customer_id)
+
+    params = {"revisionId": revision_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+async def delete_revision(revision_id: int, customer_id: str = "0", ctx=None):
+    """⚠️ DESTRUCTIVE: Permanently delete a list revision.
+
+    This operation cannot be undone. The revision and its history will be permanently removed.
+
+    This tool will prompt for user confirmation before proceeding.
+
+    Args:
+        revision_id: The revision ID to delete
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Deletion confirmation response
+    """
+    # Request user confirmation
+    result = await ctx.elicit(
+        f"⚠️ WARNING: You are about to permanently delete revision ID {revision_id} and its history. "
+        "This action CANNOT be undone. Do you want to proceed?",
+        response_type=None
+    )
+
+    if result.action != "accept":
+        raise ValueError(f"Revision deletion cancelled by user (action: {result.action})")
+
+    url = f"{API_BASE}/mylists/v2/DeleteRevision"
+    headers = _get_headers(customer_id)
+
+    params = {"revisionId": revision_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("DELETE", url, headers)
+
+# Additional MyLists Methods
+
+@mcp.tool()
+def get_price_table(list_id: int, customer_id: str = "0"):
+    """Get aggregate pricing information for all parts in a list.
+
+    Args:
+        list_id: The list ID to get pricing for
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Price table with total costs at different quantity breaks
+    """
+    url = f"{API_BASE}/mylists/v2/GetPriceTable"
+    headers = _get_headers(customer_id)
+
+    params = {"listId": list_id}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def get_alternate_part_info(part_number: str, customer_id: str = "0"):
+    """Get alternate/substitute part information.
+
+    Args:
+        part_number: The DigiKey part number
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Information about alternate and substitute parts
+    """
+    url = f"{API_BASE}/mylists/v2/GetAlternatePartInfo"
+    headers = _get_headers(customer_id)
+
+    params = {"partNumber": part_number}
+    url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+
+    return _make_request("GET", url, headers)
+
+@mcp.tool()
+def update_list_settings(list_id: int, settings: str, customer_id: str = "0"):
+    """Update list settings (visibility, package preferences, etc.).
+
+    Args:
+        list_id: The list ID to update settings for
+        settings: JSON string with settings. Example:
+                  '{"Visibility": "ReadOnly", "PackagePreference": "CutTape"}'
+        customer_id: Customer ID (default: "0")
+
+    Returns:
+        Updated list settings
+    """
+    url = f"{API_BASE}/mylists/v2/UpdateListSettings"
+    headers = _get_headers(customer_id)
+
+    # Parse the JSON string
+    settings_data = json.loads(settings) if isinstance(settings, str) else settings
+
+    body = {
+        "ListId": list_id,
+        **settings_data
+    }
+
+    return _make_request("PUT", url, headers, body)
 
 
 def main():
