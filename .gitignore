@@ -5,6 +5,8 @@ test_client.py
 .env.local
 .env.*.local
 
+/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]

@@ -23,9 +23,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-USE_SANDBOX = os.getenv("USE_SANDBOX", "true").lower() == "false"
+USE_SANDBOX = os.getenv("USE_SANDBOX", "true").lower() == "true"
 REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8139/callback")
 OAUTH_PORT = int(os.getenv("OAUTH_PORT", "8139"))
+
+print(f"=== Using {'SANDBOX' if USE_SANDBOX else 'PRODUCTION'} environment ===")
 
 # Auth code file storage
 AUTH_CODE_FILE = Path(os.getenv("AUTH_CODE_FILE", ".digikey_auth_code"))
