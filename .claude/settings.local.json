@@ -4,7 +4,9 @@
       "Bash(printenv:*)",
       "Bash(python test_mylists.py:*)",
       "Bash(uv run python:*)",
-      "Bash(openssl req:*)"
+      "Bash(openssl req:*)",
+      "Bash(tree:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
