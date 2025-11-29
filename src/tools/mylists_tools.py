@@ -496,7 +496,7 @@ def register_mylists_tools(mcp):
 
         Retrieves detailed information about all parts in a list, including pricing,
         availability, lead times, datasheets, and compliance data. Supports pagination
-        for large lists. The limit should never exceed 25 for this function; if it does,
+        for large lists. The limit should never exceed 200 for this function; if it does,
         a structured JSON error object is returned instead of raising an exception.
 
         Optional JMESPath filtering can be applied to pre-shape the response. When
@@ -511,7 +511,7 @@ def register_mylists_tools(mcp):
         Args:
             list_id: The unique identifier of the list
             start_index: Starting position for pagination (default: 0)
-            limit: Maximum number of parts to return (default: 100, for this function it should not exceed 25)
+            limit: Maximum number of parts to return (default: 100, for this function it should not exceed 200)
             assemblies: Units per part, minimum 1 (default: 1)
             include_attrition: If True, includes attrition data in response (default: False)
             customer_id: DigiKey Customer ID (default: "0")
@@ -532,21 +532,21 @@ def register_mylists_tools(mcp):
 
         Example:
             # Default filtered fields
-            result = get_parts_by_list_id("abc123", start_index=0, limit=25)
+            result = get_parts_by_list_id("abc123", start_index=0, limit=150)
             # Custom JMESPath to extract part IDs and pricing
             q = '{TotalParts: TotalParts, Parts: PartsList[].{Id: PartId, Number: DigiKeyPartNumber, Prices: Quantities[].PackOptions[].{Unit: CalculatedUnitPrice, Ext: ExtendedPrice}}}'
-            result = get_parts_by_list_id("abc123", start_index=0, limit=25, jmespath_query=q)
+            result = get_parts_by_list_id("abc123", start_index=0, limit=150, jmespath_query=q)
         """
         _require_user_auth()
         
-        if limit is not None and limit > 25:
+        if limit is not None and limit > 200:
             return {
                 "error": {
                     "type": "InvalidLimit",
                     "code": "LIMIT_TOO_HIGH",
-                    "message": "limit must be <= 25",
+                    "message": "limit must be <= 200",
                     "providedLimit": limit,
-                    "allowedMax": 25,
+                    "allowedMax": 200,
                     "listId": list_id
                 }
             }
