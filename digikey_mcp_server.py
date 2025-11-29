@@ -2,7 +2,7 @@
 from fastmcp import FastMCP
 from src.config import logger
 from src.oauth.state import oauth_state
-from src.oauth.flow import get_client_token, auto_launch_oauth_if_needed
+from src.oauth.flow import get_client_token
 from src.api.auth import initialize_user_token_from_file
 from src.tools.oauth_tools import register_oauth_tools
 from src.tools.product_tools import register_product_tools
@@ -28,7 +28,6 @@ logger.info("=== SERVER READY ===")
 
 def main():
     """Main entry point for the MCP server."""
-    #auto_launch_oauth_if_needed()
     mcp.run()
 
 

@@ -113,24 +113,3 @@ def refresh_user_token():
     return token_data
 
 
-def auto_launch_oauth_if_needed():
-    """Automatically launch OAuth flow if no auth code file exists."""
-    if AUTH_CODE_FILE.exists():
-        logger.info("Auth code file exists, loading existing authorization...")
-        return False
-
-    logger.info("No auth code file found. Launching OAuth flow...")
-
-    start_oauth_server()
-    auth_url = generate_authorization_url()
-
-    logger.info(f"Opening browser to: {auth_url}")
-
-    try:
-        webbrowser.open(auth_url)
-        logger.info("✓ Browser launched successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to open browser: {e}")
-        logger.info(f"Please manually open this URL: {auth_url}")
-        return True

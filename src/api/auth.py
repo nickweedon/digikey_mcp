@@ -21,7 +21,8 @@ def initialize_user_token_from_file():
         code = auth_data.get("auth_code")
         if code:
             logger.info("Exchanging saved authorization code for tokens...")
-            token_data = exchange_code_for_token(code)
+            # This will update the oauth_state with user_token and refresh_token
+            exchange_code_for_token(code)
             logger.info("✓ User token initialized from saved auth code")
             return True
     except Exception as e:

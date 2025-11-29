@@ -39,55 +39,44 @@ def register_oauth_tools(mcp):
                 "2. Log in to your DigiKey account",
                 "3. Authorize the application to access your MyLists",
                 "4. You will be redirected to a success page",
-                "5. Call oauth_complete_login() to finalize the authentication"
-            ],
-            "redirect_uri": REDIRECT_URI
+                "5. Let me know once you have done this and I will call oauth_complete_login() to finalize the authentication"
+            ]
         }
 
-    # @mcp.tool()
-    # def oauth_complete_login(timeout: int = 300):
-    #     """Complete the OAuth login process by exchanging the authorization code for tokens.
+    @mcp.tool()
+    def oauth_complete_login():
+        """Complete the OAuth login process by exchanging the authorization code for tokens.
 
-    #     This should be called after the user has visited the authorization URL
-    #     and been redirected back to the callback server.
+        This should be called after the user has reported back that they have visited the authorization URL.
+        In this case the user has a auth_code but does not yet have a user_token.
+        
+        Returns:
+            dict: Status of the login completion
+        """
 
-    #     Args:
-    #         timeout: Maximum seconds to wait for the authorization code (default: 300)
+        if not oauth_state.auth_code:
+            return {
+                "status": "Missing auth code",
+                "error": "No authorization code received",
+                "suggestion": "Please call oauth_start_login() again and complete the browser authorization"
+            }
 
-    #     Returns:
-    #         dict: Status of the login completion
-    #     """
-    #     logger.info(f"Waiting for authorization code (timeout: {timeout}s)...")
-    #     start_time = time.time()
+        try:
+            # This will update the oauth_state with user_token and refresh_token
+            token_data = exchange_code_for_token(oauth_state.auth_code)
 
-    #     while not oauth_state.auth_code and (time.time() - start_time) < timeout:
-    #         time.sleep(1)
-
-    #     if not oauth_state.auth_code:
-    #         return {
-    #             "status": "timeout",
-    #             "error": f"No authorization code received within {timeout} seconds",
-    #             "suggestion": "Please call oauth_start_login() again and complete the browser authorization"
-    #         }
-
-    #     try:
-    #         token_data = exchange_code_for_token(oauth_state.auth_code)
-
-    #         oauth_state.auth_code = None
-    #         oauth_state.auth_state = None
-
-    #         return {
-    #             "status": "success",
-    #             "message": "Successfully authenticated with DigiKey",
-    #             "token_type": token_data.get("token_type"),
-    #             "expires_in": token_data.get("expires_in"),
-    #             "has_refresh_token": oauth_state.refresh_token is not None
-    #         }
-    #     except Exception as e:
-    #         return {
-    #             "status": "error",
-    #             "error": str(e)
-    #         }
+            return {
+                "status": "success",
+                "message": "Successfully authenticated with DigiKey",
+                "token_type": token_data.get("token_type"),
+                "expires_in": token_data.get("expires_in"),
+                "has_refresh_token": oauth_state.refresh_token is not None
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
     @mcp.tool()
     def oauth_status():
@@ -97,6 +86,7 @@ def register_oauth_tools(mcp):
             dict: Current authentication status
         """
         return {
+            "auth_code_available": oauth_state.auth_code is not None,
             "client_token_available": oauth_state.client_token is not None,
             "user_token_available": oauth_state.user_token is not None,
             "refresh_token_available": oauth_state.refresh_token is not None,
