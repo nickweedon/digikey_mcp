@@ -6,6 +6,7 @@ All tools require user authentication via OAuth 2.0.
 from typing import Optional, List, Dict, Any, Literal, Union
 import jmespath
 from dataclasses import dataclass
+from fastmcp import Context
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
 from src.api.auth import _require_user_auth
@@ -439,7 +440,7 @@ def register_mylists_tools(mcp):
     async def delete_list(
         list_id: ListId,
         customer_id: CustomerId = "0",
-        ctx=None
+        ctx: Context = None
     ) -> None:
         """⚠️ DESTRUCTIVE: Permanently delete a list and all its contents.
 
@@ -467,6 +468,9 @@ def register_mylists_tools(mcp):
             The deletion cannot be undone once confirmed.
         """
         _require_user_auth()
+
+        if ctx is None:
+            raise ValueError("Context is required for delete operations")
 
         result = await ctx.elicit(
             f"⚠️ WARNING: You are about to permanently delete list ID {list_id} and ALL its contents. "
@@ -1002,7 +1006,7 @@ def register_mylists_tools(mcp):
         list_id: ListId,
         part_id: PartId,
         customer_id: CustomerId = "0",
-        ctx=None
+        ctx: Context = None
     ) -> None:
         """⚠️ DESTRUCTIVE: Permanently delete a part from a list.
 
@@ -1033,6 +1037,9 @@ def register_mylists_tools(mcp):
             The deletion cannot be undone once confirmed.
         """
         _require_user_auth()
+
+        if ctx is None:
+            raise ValueError("Context is required for delete operations")
 
         result = await ctx.elicit(
             f"⚠️ WARNING: You are about to permanently delete part ID {part_id} from list ID {list_id}. "
