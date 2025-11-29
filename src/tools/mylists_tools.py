@@ -333,7 +333,8 @@ def register_mylists_tools(mcp):
 
         Retrieves detailed information about all parts in a list, including pricing,
         availability, lead times, datasheets, and compliance data. Supports pagination
-        for large lists.
+        for large lists. The limit should never exceed 25 for this function; if it does,
+        a structured JSON error object is returned instead of raising an exception.
 
         ⚠️ Requires user authentication via oauth_start_login()
 
@@ -342,7 +343,7 @@ def register_mylists_tools(mcp):
         Args:
             list_id: The unique identifier of the list
             start_index: Starting position for pagination (default: 0)
-            limit: Maximum number of parts to return (default: 100, max varies by API)
+            limit: Maximum number of parts to return (default: 100, for this function it should not exceed 25)
             assemblies: Units per part, minimum 1 (default: 1)
             include_attrition: If True, includes attrition data in response (default: False)
             customer_id: DigiKey Customer ID (default: "0")
@@ -366,6 +367,19 @@ def register_mylists_tools(mcp):
                 print(part['DigiKeyPartNumber'])
         """
         _require_user_auth()
+        
+        if limit is not None and limit > 25:
+            return {
+                "error": {
+                    "type": "InvalidLimit",
+                    "code": "LIMIT_TOO_HIGH",
+                    "message": "limit must be <= 25",
+                    "providedLimit": limit,
+                    "allowedMax": 25,
+                    "listId": list_id
+                }
+            }
+        
         url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
         headers = _get_headers(customer_id, use_user_token=True)
 
@@ -377,7 +391,7 @@ def register_mylists_tools(mcp):
         if assemblies is not None:
             params.append(f"assemblies={assemblies}")
         if include_attrition:
-            params.append(f"includeAttrition=true")
+            params.append("includeAttrition=true")
 
         if params:
             url += "?" + "&".join(params)
