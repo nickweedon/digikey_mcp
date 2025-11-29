@@ -6,7 +6,6 @@ All tools require user authentication via OAuth 2.0.
 from typing import Optional, List, Dict, Any, Literal, Union
 import jmespath
 from dataclasses import dataclass
-from fastmcp import Context
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
 from src.api.auth import _require_user_auth
@@ -437,15 +436,14 @@ def register_mylists_tools(mcp):
         return _make_request("PUT", url, headers, use_user_token=True)
 
     @mcp.tool()
-    async def delete_list(
+    def delete_list(
         list_id: ListId,
-        customer_id: CustomerId = "0",
-        ctx: Context = None
+        customer_id: CustomerId = "0"
     ) -> None:
         """⚠️ DESTRUCTIVE: Permanently delete a list and all its contents.
 
         Deletes the specified list and all its parts, settings, and metadata.
-        This operation is irreversible and will prompt for user confirmation.
+        This operation is irreversible.
 
         ⚠️ Requires user authentication via oauth_start_login()
 
@@ -454,32 +452,18 @@ def register_mylists_tools(mcp):
         Args:
             list_id: The unique identifier of the list to delete
             customer_id: DigiKey Customer ID (default: "0")
-            ctx: Context object (automatically provided by FastMCP)
 
         Returns:
             None (HTTP 204 No Content on success)
 
         Raises:
-            ValueError: If user is not authenticated or cancels the deletion
+            ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails (e.g., 404 if list not found)
 
         Note:
-            This tool requires explicit user confirmation before deletion proceeds.
             The deletion cannot be undone once confirmed.
         """
         _require_user_auth()
-
-        if ctx is None:
-            raise ValueError("Context is required for delete operations")
-
-        result = await ctx.elicit(
-            f"⚠️ WARNING: You are about to permanently delete list ID {list_id} and ALL its contents. "
-            "This action CANNOT be undone. Do you want to proceed?",
-            response_type=None
-        )
-
-        if result.action != "accept":
-            raise ValueError(f"List deletion cancelled by user (action: {result.action})")
 
         url = f"{API_BASE}/mylists/v1/lists/{list_id}"
         headers = _get_headers(customer_id, use_user_token=True)
@@ -1002,16 +986,14 @@ def register_mylists_tools(mcp):
         return _make_request("PUT", url, headers, api_data, use_user_token=True)
 
     @mcp.tool()
-    async def delete_part_from_list(
+    def delete_part_from_list(
         list_id: ListId,
         part_id: PartId,
-        customer_id: CustomerId = "0",
-        ctx: Context = None
+        customer_id: CustomerId = "0"
     ) -> None:
         """⚠️ DESTRUCTIVE: Permanently delete a part from a list.
 
-        Removes the specified part from the list. This operation is irreversible
-        and will prompt for user confirmation before proceeding.
+        Removes the specified part from the list. This operation is irreversible.
 
         ⚠️ Requires user authentication via oauth_start_login()
 
@@ -1023,32 +1005,18 @@ def register_mylists_tools(mcp):
                     This is the Part.UniqueId field, NOT the Part.PartId field.
                     Example: "abc123def456" (string), not 1942531 (integer)
             customer_id: DigiKey Customer ID (default: "0")
-            ctx: Context object (automatically provided by FastMCP)
 
         Returns:
             None (HTTP 204 No Content on success)
 
         Raises:
-            ValueError: If user is not authenticated or cancels the deletion
+            ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails (e.g., 404 if part not found)
 
         Note:
-            This tool requires explicit user confirmation before deletion proceeds.
             The deletion cannot be undone once confirmed.
         """
         _require_user_auth()
-
-        if ctx is None:
-            raise ValueError("Context is required for delete operations")
-
-        result = await ctx.elicit(
-            f"⚠️ WARNING: You are about to permanently delete part ID {part_id} from list ID {list_id}. "
-            "This action CANNOT be undone. Do you want to proceed?",
-            response_type=None
-        )
-
-        if result.action != "accept":
-            raise ValueError(f"Part deletion cancelled by user (action: {result.action})")
 
         url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
         headers = _get_headers(customer_id, use_user_token=True)
