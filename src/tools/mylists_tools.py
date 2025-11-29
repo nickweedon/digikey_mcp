@@ -107,152 +107,168 @@ class RequestedPart:
         return result
 
 
+# MyLists API Response Models - Dataclasses based on DigiKey API JSON schema
+@dataclass
+class SubPackOption:
+    """Sub-package option for parts."""
+    __root__: Optional[Any] = None
+
+
+@dataclass
+class PackOption:
+    """Package option details for a part."""
+    PartId: int
+    DigiKeyPartNumber: str
+    ManufacturerPartNumber: str
+    Quantity: int
+    PackType: str
+    QuantityAvailable: int
+    MinimumOrderQuantity: int
+    CalculatedUnitPrice: float
+    ExtendedPrice: float
+    BreakPrice: float
+    BreakQuantity: int
+    IsUpsell: bool
+    ValueAdditionalFee: float
+    SubPackOptions: List[Optional[Any]]
+    FormattedUnitPrice: str
+    FormattedExtendedPrice: str
+
+
+@dataclass
+class Quantity:
+    """Quantity information for a part in a list."""
+    QuantityRequested: int
+    CalculatedQuantity: int
+    TargetPrice: float | None
+    SelectedPackType: str
+    SelectedSubPackType: str
+    IsInactive: bool
+    SelectedPackOptionIndex: int
+    SelectedSubPackOptionIndex: int
+    PackOptions: Optional[List[PackOption]] = None
+
+
+@dataclass
+class Flags:
+    """Status flags for a part."""
+    NonStock: bool
+    IsNCNR: bool
+    IsSDS: bool
+    IsValueAdd: bool
+    IsMatched: bool
+    IsMarketPlace: bool
+    BoNotAllowed: bool
+    DisplayRegularLeadTime: bool
+    DisplayCheckActiveLeadTime: bool
+    MultipleCrefsForPart: bool
+    MultiplePartsForCref: bool
+    IsChecked: bool
+    IsEditable: bool
+    IsDeniedByCountry: bool
+    IsDeniedByCurrency: bool
+    IsDeniedByCustomerId: bool
+
+
+@dataclass
+class Substitute:
+    """Substitute part information."""
+    PartId: int
+    DigiKeyPartNumber: str
+    Manufacturer: str
+    ManufacturerPartNumber: str
+    Description: str
+    PartDetailUrl: str
+    SubstituteType: str
+    MinimumOrderQuantity: int
+    QuantityAvailable: str
+    TariffStatus: str
+    MasterPartId: int
+    UnitPrice: str
+
+
+@dataclass
+class AlternatePart:
+    """Alternate part information."""
+    PartId: int
+    DigiKeyPartNumber: str
+    Manufacturer: str
+    ManufacturerPartNumber: str
+    Description: str
+    PartDetailUrl: str
+    SubstituteType: str
+    MinimumOrderQuantity: int
+    QuantityAvailable: str
+    TariffStatus: str
+    MasterPartId: int
+    UnitPrice: str
+
+
+@dataclass
+class PartsAvailableForCrefItem:
+    """Part available for customer reference."""
+    ManufacturerPartnumber: str
+    Manufacturer: str
+    MinimumOrderQuantity: int
+    Description: str
+    QuantityAvailable: int
+
+
+@dataclass
+class Part:
+    """Complete part information from a MyList."""
+    PartId: int
+    UniqueId: str
+    CustomerReference: str
+    ReferenceDesignator: str
+    Notes: str
+    MinOrderQty: int
+    MaxOrderQty: int
+    OriginalPartNumber: str
+    RequestedPartNumber: str
+    DigiKeyPartNumber: str
+    ManufacturerPartNumber: str
+    RequestedManufacturerName: str
+    Manufacturer: str
+    Description: str
+    PartStatus: str
+    PartStatusCode: str
+    Availability: str | None
+    TariffCode: str
+    QuantityAvailable: int
+    SelectedQuantityIndex: int
+    Attrition: int | float
+    Quantities: List[Quantity]
+    VendorLeadWeeks: int
+    PartDetailUrl: str
+    PrimaryDatasheetUrl: str
+    ImageUrl: str
+    ThumbnailUrl: str
+    MarketPlaceSupplierLink: str
+    SupplierName: str
+    Substitutes: Optional[List[Substitute]]
+    AlternateParts: List[AlternatePart]
+    Flags: Any
+    ReachStatus: str
+    RohsStatusMessage: str
+    Eccn: str
+    Htsus: str
+    CountryOfOrigin: str
+    EnvironmentalDocs: Dict[str, str]
+    Category: str
+    PartsAvailableForCref: List[PartsAvailableForCrefItem]
+    CrefsAvailableForPart: List[str]
+
+
+@dataclass
+class PartsListResponse:
+    """Response containing a list of parts."""
+    PartsList: List[Part]
+    TotalParts: int
+
+
 def register_mylists_tools(mcp):
     """Register MyLists API MCP tools."""
-
-    # Dataclasses based on the provided JSON schema, plus extra fields
-    @dataclass
-    class SubPackOption:
-        # Example shows list with nulls; model as Optional[Any]
-        __root__: Optional[Any] = None
-
-    @dataclass
-    class PackOption:
-        PartId: int
-        DigiKeyPartNumber: str
-        ManufacturerPartNumber: str
-        Quantity: int
-        PackType: str
-        QuantityAvailable: int
-        MinimumOrderQuantity: int
-        CalculatedUnitPrice: float
-        ExtendedPrice: float
-        BreakPrice: float
-        BreakQuantity: int
-        IsUpsell: bool
-        ValueAdditionalFee: float
-        SubPackOptions: List[Optional[Any]]
-        FormattedUnitPrice: str
-        FormattedExtendedPrice: str
-
-    @dataclass
-    class Quantity:
-        QuantityRequested: int
-        CalculatedQuantity: int
-        TargetPrice: float | None
-        SelectedPackType: str
-        SelectedSubPackType: str
-        IsInactive: bool
-        SelectedPackOptionIndex: int
-        SelectedSubPackOptionIndex: int
-        # Include PackOptions in return type based on example
-        PackOptions: Optional[List[PackOption]] = None
-
-    @dataclass
-    class Flags:
-        NonStock: bool
-        IsNCNR: bool
-        IsSDS: bool
-        IsValueAdd: bool
-        IsMatched: bool
-        IsMarketPlace: bool
-        BoNotAllowed: bool
-        DisplayRegularLeadTime: bool
-        DisplayCheckActiveLeadTime: bool
-        MultipleCrefsForPart: bool
-        MultiplePartsForCref: bool
-        IsChecked: bool
-        IsEditable: bool
-        IsDeniedByCountry: bool
-        IsDeniedByCurrency: bool
-        IsDeniedByCustomerId: bool
-
-    @dataclass
-    class Substitute:
-        PartId: int
-        DigiKeyPartNumber: str
-        Manufacturer: str
-        ManufacturerPartNumber: str
-        Description: str
-        PartDetailUrl: str
-        SubstituteType: str
-        MinimumOrderQuantity: int
-        QuantityAvailable: str
-        TariffStatus: str
-        MasterPartId: int
-        UnitPrice: str
-
-    @dataclass
-    class AlternatePart:
-        PartId: int
-        DigiKeyPartNumber: str
-        Manufacturer: str
-        ManufacturerPartNumber: str
-        Description: str
-        PartDetailUrl: str
-        SubstituteType: str
-        MinimumOrderQuantity: int
-        QuantityAvailable: str
-        TariffStatus: str
-        MasterPartId: int
-        UnitPrice: str
-
-    @dataclass
-    class PartsAvailableForCrefItem:
-        ManufacturerPartnumber: str
-        Manufacturer: str
-        MinimumOrderQuantity: int
-        Description: str
-        QuantityAvailable: int
-
-    @dataclass
-    class Part:
-        PartId: int
-        UniqueId: str
-        CustomerReference: str
-        ReferenceDesignator: str
-        Notes: str
-        MinOrderQty: int
-        MaxOrderQty: int
-        OriginalPartNumber: str
-        RequestedPartNumber: str
-        DigiKeyPartNumber: str
-        ManufacturerPartNumber: str
-        RequestedManufacturerName: str
-        Manufacturer: str
-        Description: str
-        PartStatus: str
-        PartStatusCode: str
-        Availability: str | None
-        TariffCode: str
-        QuantityAvailable: int
-        SelectedQuantityIndex: int
-        Attrition: int | float
-        Quantities: List[Quantity]
-        VendorLeadWeeks: int
-        PartDetailUrl: str
-        PrimaryDatasheetUrl: str
-        ImageUrl: str
-        ThumbnailUrl: str
-        MarketPlaceSupplierLink: str
-        SupplierName: str
-        Substitutes: Optional[List[Substitute]]
-        AlternateParts: List[AlternatePart]
-        Flags: Any
-        ReachStatus: str
-        RohsStatusMessage: str
-        Eccn: str
-        Htsus: str
-        CountryOfOrigin: str
-        EnvironmentalDocs: Dict[str, str]
-        Category: str
-        PartsAvailableForCref: List[PartsAvailableForCrefItem]
-        CrefsAvailableForPart: List[str]
-
-    @dataclass
-    class PartsListResponse:
-        PartsList: List[Part]
-        TotalParts: int
 
     @mcp.tool()
     def get_all_lists(customer_id: CustomerId = "0") -> Dict[str, Any]:
@@ -475,7 +491,7 @@ def register_mylists_tools(mcp):
         include_attrition: bool = False,
         customer_id: CustomerId = "0",
         jmespath_query: Optional[str] = None
-    ) -> Union["PartsListResponse", Dict[str, Any]]:
+    ) -> Union[PartsListResponse, Dict[str, Any]]:
         """Get all parts from a specific list with optional pagination.
 
         Retrieves detailed information about all parts in a list, including pricing,

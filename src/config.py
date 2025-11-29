@@ -40,4 +40,5 @@ else:
     AUTHORIZE_URL = "https://api.digikey.com/v1/oauth2/authorize"
     API_BASE = "https://api.digikey.com"
 
-print(f"=== Using {'SANDBOX' if USE_SANDBOX else 'PRODUCTION'} environment ===")
+# Log environment (use logger.info instead of print to avoid breaking MCP JSON-RPC)
+logger.info(f"Using {'SANDBOX' if USE_SANDBOX else 'PRODUCTION'} environment")

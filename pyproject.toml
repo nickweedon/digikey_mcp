@@ -6,5 +6,6 @@ dependencies = [
     "fastmcp",
     "requests",
     "python-dotenv",
+    "jmespath",
 ]
 requires-python = ">=3.10" 
