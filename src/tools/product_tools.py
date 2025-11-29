@@ -1,14 +1,155 @@
 """Product Search API MCP Tools"""
+from typing import Optional, List, Dict, Any, Union
+from dataclasses import dataclass
+import jmespath
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
+
+
+# Product Search Response Models - Dataclasses based on DigiKey API JSON schema
+@dataclass
+class Manufacturer:
+    """Manufacturer information."""
+    Id: int
+    Name: str
+
+
+@dataclass
+class Description:
+    """Product description."""
+    ProductDescription: str
+    DetailedDescription: Optional[str] = None
+
+
+@dataclass
+class ProductStatus:
+    """Product status information."""
+    Id: int
+    Status: str
+
+
+@dataclass
+class PackageType:
+    """Package type information."""
+    Id: int
+    Name: str
+
+
+@dataclass
+class Supplier:
+    """Supplier information."""
+    Id: int
+    Name: str
+
+
+@dataclass
+class PricingTier:
+    """Pricing tier information."""
+    BreakQuantity: int
+    UnitPrice: float
+    TotalPrice: float
+
+
+@dataclass
+class ProductVariation:
+    """Product variation with packaging and pricing."""
+    DigiKeyProductNumber: str
+    PackageType: PackageType
+    StandardPricing: List[PricingTier]
+    MyPricing: List[PricingTier]
+    MarketPlace: bool
+    QuantityAvailableforPackageType: int
+    MinimumOrderQuantity: int
+    StandardPackage: int
+    Supplier: Optional[Supplier] = None
+    TariffActive: Optional[bool] = None
+    MaxQuantityForDistribution: Optional[int] = None
+    DigiReelFee: Optional[float] = None
+
+
+@dataclass
+class CategoryNode:
+    """Category information."""
+    CategoryId: int
+    ParentId: int
+    Name: str
+    ProductCount: int
+    NewProductCount: int
+    ImageUrl: Optional[str] = None
+
+
+@dataclass
+class ParameterValue:
+    """Product parameter value."""
+    ParameterId: int
+    ParameterText: str
+    ParameterType: str
+    ValueId: str
+    ValueText: str
+
+
+@dataclass
+class Product:
+    """Complete product information from keyword search."""
+    Description: Description
+    Manufacturer: Manufacturer
+    ManufacturerProductNumber: str
+    UnitPrice: float
+    ProductUrl: str
+    ProductVariations: List[ProductVariation]
+    QuantityAvailable: int
+    ProductStatus: ProductStatus
+    BackOrderNotAllowed: bool
+    NormallyStocking: bool
+    Discontinued: bool
+    EndOfLife: bool
+    Ncnr: bool
+    DatasheetUrl: Optional[str] = None
+    PhotoUrl: Optional[str] = None
+    PrimaryVideoUrl: Optional[str] = None
+    Parameters: Optional[List[ParameterValue]] = None
+    Category: Optional[CategoryNode] = None
+    BaseProductNumber: Optional[str] = None
+    DateLastBuyChance: Optional[str] = None
+    ManufacturerLeadWeeks: Optional[str] = None
+    ManufacturerPublicQuantity: Optional[int] = None
+
+
+@dataclass
+class KeywordSearchResponse:
+    """Response from keyword search."""
+    Products: List[Product]
+    ProductsCount: int
+    ExactMatches: Optional[List[Product]] = None
+    FilterOptions: Optional[Dict[str, Any]] = None
+    SearchLocaleUsed: Optional[Dict[str, Any]] = None
+    AppliedParametricFiltersDto: Optional[List[Dict[str, Any]]] = None
 
 
 def register_product_tools(mcp):
     """Register Product Search API MCP tools."""
 
     @mcp.tool()
-    def keyword_search(keywords: str, limit: int = 5, manufacturer_id: str = None, category_id: str = None, search_options: str = None, sort_field: str = None, sort_order: str = "Ascending"):
+    def keyword_search(
+        keywords: str,
+        limit: int = 5,
+        manufacturer_id: str = None,
+        category_id: str = None,
+        search_options: str = None,
+        sort_field: str = None,
+        sort_order: str = "Ascending",
+        jmespath_query: Optional[str] = None
+    ) -> Union[KeywordSearchResponse, Dict[str, Any]]:
         """Search DigiKey products by keyword.
+
+        Retrieves product information based on keyword search with optional filtering.
+        Supports pagination, manufacturer/category filtering, and custom result shaping
+        via JMESPath queries.
+
+        Optional JMESPath filtering can be applied to pre-shape the response. When
+        `jmespath_query` is provided, the function returns a filtered JSON (dict)
+        according to the JMESPath expression. If not provided, a sensible default
+        query is used that selects commonly needed fields.
 
         Args:
             keywords: Search terms or part numbers
@@ -16,8 +157,31 @@ def register_product_tools(mcp):
             manufacturer_id: Filter by specific manufacturer ID
             category_id: Filter by specific category ID
             search_options: Comma-delimited filters like LeadFree,RoHSCompliant,InStock
-            sort_field: Field to sort by. Options: None, Packaging, ProductStatus, DigiKeyProductNumber, ManufacturerProductNumber, Manufacturer, MinimumQuantity, QuantityAvailable, Price, Supplier, PriceManufacturerStandardPackage
+            sort_field: Field to sort by. Options: None, Packaging, ProductStatus,
+                       DigiKeyProductNumber, ManufacturerProductNumber, Manufacturer,
+                       MinimumQuantity, QuantityAvailable, Price, Supplier,
+                       PriceManufacturerStandardPackage
             sort_order: Sort direction - Ascending or Descending (default: Ascending)
+            jmespath_query: Optional JMESPath expression to pre-filter and shape the
+                           response. If omitted, a default query returns only commonly
+                           used fields.
+
+        Returns:
+            Union[KeywordSearchResponse, Dict[str, Any]]: Filtered dict if JMESPath
+            query provided, otherwise returns filtered dict with commonly used fields.
+            In case of schema build error, returns structured error dict.
+
+        Example:
+            # Default filtered fields
+            result = keyword_search("arduino", limit=5)
+
+            # Custom JMESPath to extract specific fields
+            q = '{Count: ProductsCount, Parts: Products[].{PN: ManufacturerProductNumber, Price: UnitPrice, Stock: QuantityAvailable}}'
+            result = keyword_search("arduino", limit=5, jmespath_query=q)
+
+            # Get only in-stock products with pricing
+            q = '{Products: Products[?QuantityAvailable > `0`].{PN: ManufacturerProductNumber, Price: UnitPrice}}'
+            result = keyword_search("capacitor", limit=10, jmespath_query=q)
         """
         url = f"{API_BASE}/products/v4/search/keyword"
         headers = _get_headers()
@@ -40,7 +204,201 @@ def register_product_tools(mcp):
                 "SortOrder": sort_order
             }
 
-        return _make_request("POST", url, headers, body, use_user_token=False)
+        response = _make_request("POST", url, headers, body, use_user_token=False)
+
+        # Default JMESPath query that extracts commonly used fields
+        default_query = (
+            '{ProductsCount: ProductsCount, Products: Products[].{'
+            'DigiKeyPartNumber: ProductVariations[0].DigiKeyProductNumber,'
+            'ManufacturerPartNumber: ManufacturerProductNumber,'
+            'Manufacturer: Manufacturer.Name,'
+            'Description: Description.ProductDescription,'
+            'UnitPrice: UnitPrice,'
+            'QuantityAvailable: QuantityAvailable,'
+            'MinimumOrderQuantity: ProductVariations[0].MinimumOrderQuantity,'
+            'ProductStatus: ProductStatus.Status,'
+            'ProductUrl: ProductUrl,'
+            'DatasheetUrl: DatasheetUrl,'
+            'PhotoUrl: PhotoUrl,'
+            'InStock: (QuantityAvailable > `0`),'
+            'Pricing: ProductVariations[0].StandardPricing}}'
+        )
+
+        # Apply JMESPath query if provided or use default
+        query_to_use = jmespath_query or default_query
+        try:
+            filtered = jmespath.search(query_to_use, response)
+            if filtered is not None:
+                return filtered
+        except Exception:
+            # Fall back to schema build with error metadata
+            pass
+
+        # Build dataclass response according to schema, preserving extra fields
+        try:
+            raw_products = response.get("Products", [])
+            products_count = response.get("ProductsCount", 0)
+
+            products_dc: List[Product] = []
+            for p in raw_products:
+                # Build Description
+                desc_raw = p.get("Description", {})
+                description = Description(
+                    ProductDescription=desc_raw.get("ProductDescription", ""),
+                    DetailedDescription=desc_raw.get("DetailedDescription")
+                )
+
+                # Build Manufacturer
+                mfr_raw = p.get("Manufacturer", {})
+                manufacturer = Manufacturer(
+                    Id=int(mfr_raw.get("Id", 0)),
+                    Name=mfr_raw.get("Name", "")
+                )
+
+                # Build ProductStatus
+                status_raw = p.get("ProductStatus", {})
+                product_status = ProductStatus(
+                    Id=int(status_raw.get("Id", 0)),
+                    Status=status_raw.get("Status", "")
+                )
+
+                # Build ProductVariations
+                variations_raw = p.get("ProductVariations", [])
+                variations_dc = []
+                for v in variations_raw:
+                    # Build PackageType
+                    pkg_raw = v.get("PackageType", {})
+                    package_type = PackageType(
+                        Id=int(pkg_raw.get("Id", 0)),
+                        Name=pkg_raw.get("Name", "")
+                    )
+
+                    # Build Supplier (optional)
+                    supplier = None
+                    supplier_raw = v.get("Supplier")
+                    if supplier_raw:
+                        supplier = Supplier(
+                            Id=int(supplier_raw.get("Id", 0)),
+                            Name=supplier_raw.get("Name", "")
+                        )
+
+                    # Build StandardPricing
+                    std_pricing_raw = v.get("StandardPricing", [])
+                    std_pricing_dc = []
+                    for tier in std_pricing_raw:
+                        std_pricing_dc.append(
+                            PricingTier(
+                                BreakQuantity=int(tier.get("BreakQuantity", 0)),
+                                UnitPrice=float(tier.get("UnitPrice", 0.0)),
+                                TotalPrice=float(tier.get("TotalPrice", 0.0))
+                            )
+                        )
+
+                    # Build MyPricing
+                    my_pricing_raw = v.get("MyPricing", [])
+                    my_pricing_dc = []
+                    for tier in my_pricing_raw:
+                        my_pricing_dc.append(
+                            PricingTier(
+                                BreakQuantity=int(tier.get("BreakQuantity", 0)),
+                                UnitPrice=float(tier.get("UnitPrice", 0.0)),
+                                TotalPrice=float(tier.get("TotalPrice", 0.0))
+                            )
+                        )
+
+                    variations_dc.append(
+                        ProductVariation(
+                            DigiKeyProductNumber=v.get("DigiKeyProductNumber", ""),
+                            PackageType=package_type,
+                            StandardPricing=std_pricing_dc,
+                            MyPricing=my_pricing_dc,
+                            MarketPlace=bool(v.get("MarketPlace", False)),
+                            QuantityAvailableforPackageType=int(v.get("QuantityAvailableforPackageType", 0)),
+                            MinimumOrderQuantity=int(v.get("MinimumOrderQuantity", 0)),
+                            StandardPackage=int(v.get("StandardPackage", 0)),
+                            Supplier=supplier,
+                            TariffActive=v.get("TariffActive"),
+                            MaxQuantityForDistribution=v.get("MaxQuantityForDistribution"),
+                            DigiReelFee=v.get("DigiReelFee")
+                        )
+                    )
+
+                # Build Parameters (optional)
+                params_raw = p.get("Parameters")
+                parameters = None
+                if params_raw:
+                    parameters = []
+                    for param in params_raw:
+                        parameters.append(
+                            ParameterValue(
+                                ParameterId=int(param.get("ParameterId", 0)),
+                                ParameterText=param.get("ParameterText", ""),
+                                ParameterType=param.get("ParameterType", ""),
+                                ValueId=str(param.get("ValueId", "")),
+                                ValueText=param.get("ValueText", "")
+                            )
+                        )
+
+                # Build Category (optional)
+                category = None
+                cat_raw = p.get("Category")
+                if cat_raw:
+                    category = CategoryNode(
+                        CategoryId=int(cat_raw.get("CategoryId", 0)),
+                        ParentId=int(cat_raw.get("ParentId", 0)),
+                        Name=cat_raw.get("Name", ""),
+                        ProductCount=int(cat_raw.get("ProductCount", 0)),
+                        NewProductCount=int(cat_raw.get("NewProductCount", 0)),
+                        ImageUrl=cat_raw.get("ImageUrl")
+                    )
+
+                products_dc.append(
+                    Product(
+                        Description=description,
+                        Manufacturer=manufacturer,
+                        ManufacturerProductNumber=p.get("ManufacturerProductNumber", ""),
+                        UnitPrice=float(p.get("UnitPrice", 0.0)),
+                        ProductUrl=p.get("ProductUrl", ""),
+                        ProductVariations=variations_dc,
+                        QuantityAvailable=int(p.get("QuantityAvailable", 0)),
+                        ProductStatus=product_status,
+                        BackOrderNotAllowed=bool(p.get("BackOrderNotAllowed", False)),
+                        NormallyStocking=bool(p.get("NormallyStocking", False)),
+                        Discontinued=bool(p.get("Discontinued", False)),
+                        EndOfLife=bool(p.get("EndOfLife", False)),
+                        Ncnr=bool(p.get("Ncnr", False)),
+                        DatasheetUrl=p.get("DatasheetUrl"),
+                        PhotoUrl=p.get("PhotoUrl"),
+                        PrimaryVideoUrl=p.get("PrimaryVideoUrl"),
+                        Parameters=parameters,
+                        Category=category,
+                        BaseProductNumber=p.get("BaseProductNumber"),
+                        DateLastBuyChance=p.get("DateLastBuyChance"),
+                        ManufacturerLeadWeeks=p.get("ManufacturerLeadWeeks"),
+                        ManufacturerPublicQuantity=p.get("ManufacturerPublicQuantity")
+                    )
+                )
+
+            result_dc = KeywordSearchResponse(
+                Products=products_dc,
+                ProductsCount=products_count,
+                ExactMatches=None,  # TODO: Parse if needed
+                FilterOptions=response.get("FilterOptions"),
+                SearchLocaleUsed=response.get("SearchLocaleUsed"),
+                AppliedParametricFiltersDto=response.get("AppliedParametricFiltersDto")
+            )
+            return result_dc
+
+        except Exception as e:
+            return {
+                "error": {
+                    "type": "KeywordSearchSchemaBuildError",
+                    "code": "SCHEMA_BUILD_FAILED",
+                    "message": str(e),
+                    "keywords": keywords,
+                    "originalResponse": response
+                }
+            }
 
     @mcp.tool()
     def product_details(product_number: str, manufacturer_id: str = None, customer_id: str = "0"):

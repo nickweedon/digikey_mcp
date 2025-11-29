@@ -573,6 +573,8 @@ def register_mylists_tools(mcp):
         # return the filtered dict directly.
         default_query = (
             '{TotalParts: TotalParts, Parts: PartsList[].{'
+            'UniqueId: UniqueId,'
+            'PartId: PartId,'
             'ManufacturerPartNumber: ManufacturerPartNumber,'
             'Manufacturer: Manufacturer,'
             'Description: Description,'
@@ -901,7 +903,9 @@ def register_mylists_tools(mcp):
 
         Args:
             list_id: The unique identifier of the list
-            part_id: The unique identifier of the part within the list
+            part_id: The UniqueId of the part (string) from get_parts_by_list_id().
+                    This is the Part.UniqueId field, NOT the Part.PartId field.
+                    Example: "abc123def456" (string), not 1942531 (integer)
             customer_id: DigiKey Customer ID (default: "0")
 
         Returns:
@@ -942,7 +946,9 @@ def register_mylists_tools(mcp):
 
         Args:
             list_id: The unique identifier of the list
-            part_id: The unique identifier of the part to update
+            part_id: The UniqueId of the part (string) from get_parts_by_list_id().
+                    This is the Part.UniqueId field, NOT the Part.PartId field.
+                    Example: "abc123def456" (string), not 1942531 (integer)
             part_data: Dictionary with fields to update. Can include:
                       - customer_reference: Your custom reference
                       - reference_designator: Component designator (e.g., "R1")
@@ -1009,7 +1015,9 @@ def register_mylists_tools(mcp):
 
         Args:
             list_id: The unique identifier of the list
-            part_id: The unique identifier of the part to delete
+            part_id: The UniqueId of the part (string) from get_parts_by_list_id().
+                    This is the Part.UniqueId field, NOT the Part.PartId field.
+                    Example: "abc123def456" (string), not 1942531 (integer)
             customer_id: DigiKey Customer ID (default: "0")
             ctx: Context object (automatically provided by FastMCP)
 

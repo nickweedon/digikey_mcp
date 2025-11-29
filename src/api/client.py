@@ -92,6 +92,32 @@ def _make_request(method: str, url: str, headers: dict, data: dict = None, use_u
     # Handle errors
     if resp.status_code not in [200, 201, 204]:
         logger.error(f"API error: {resp.status_code} - {resp.text}")
+
+        # Return structured errors for common HTTP errors to help LLMs understand and recover
+        if resp.status_code in [400, 403, 404]:
+            try:
+                error_detail = resp.json()
+            except (ValueError, json.JSONDecodeError):
+                error_detail = {"detail": resp.text}
+
+            error_type_map = {
+                400: "BadRequest",
+                403: "Forbidden",
+                404: "ResourceNotFound"
+            }
+
+            return {
+                "error": {
+                    "type": error_type_map.get(resp.status_code, "APIError"),
+                    "code": f"HTTP_{resp.status_code}",
+                    "status": resp.status_code,
+                    "message": error_detail.get("detail") or error_detail.get("title") or resp.text,
+                    "url": resp.url,
+                    "details": error_detail
+                }
+            }
+
+        # For other errors (401 after retry, 5xx, etc.), raise as before
         resp.raise_for_status()
 
     # Handle empty responses (e.g., DELETE operations)
