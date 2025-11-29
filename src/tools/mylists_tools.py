@@ -382,7 +382,27 @@ def register_mylists_tools(mcp):
         if params:
             url += "?" + "&".join(params)
 
-        return _make_request("GET", url, headers, use_user_token=True)
+        response = _make_request("GET", url, headers, use_user_token=True)
+        
+        # Strip large/optional fields for cleaner payloads
+        try:
+            parts = response.get("PartsList")
+            if isinstance(parts, list):
+                for part in parts:
+                    if isinstance(part, dict):
+                        # Remove part-level substitutes
+                        part.pop("Substitutes", None)
+                        # Clean quantities array
+                        quantities = part.get("Quantities")
+                        if isinstance(quantities, list):
+                            for q in quantities:
+                                if isinstance(q, dict):
+                                    q.pop("PackOptions", None)
+        except Exception:
+            # If response isn't the expected shape, return as-is
+            return response
+
+        return response
 
     @mcp.tool()
     def add_parts_to_list(
