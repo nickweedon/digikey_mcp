@@ -3,7 +3,9 @@
 Provides tools for interacting with the DigiKey MyLists API.
 All tools require user authentication via OAuth 2.0.
 """
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Union
+import jmespath
+from dataclasses import dataclass
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
 from src.api.auth import _require_user_auth
@@ -107,6 +109,150 @@ class RequestedPart:
 
 def register_mylists_tools(mcp):
     """Register MyLists API MCP tools."""
+
+    # Dataclasses based on the provided JSON schema, plus extra fields
+    @dataclass
+    class SubPackOption:
+        # Example shows list with nulls; model as Optional[Any]
+        __root__: Optional[Any] = None
+
+    @dataclass
+    class PackOption:
+        PartId: int
+        DigiKeyPartNumber: str
+        ManufacturerPartNumber: str
+        Quantity: int
+        PackType: str
+        QuantityAvailable: int
+        MinimumOrderQuantity: int
+        CalculatedUnitPrice: float
+        ExtendedPrice: float
+        BreakPrice: float
+        BreakQuantity: int
+        IsUpsell: bool
+        ValueAdditionalFee: float
+        SubPackOptions: List[Optional[Any]]
+        FormattedUnitPrice: str
+        FormattedExtendedPrice: str
+
+    @dataclass
+    class Quantity:
+        QuantityRequested: int
+        CalculatedQuantity: int
+        TargetPrice: float | None
+        SelectedPackType: str
+        SelectedSubPackType: str
+        IsInactive: bool
+        SelectedPackOptionIndex: int
+        SelectedSubPackOptionIndex: int
+        # Include PackOptions in return type based on example
+        PackOptions: Optional[List[PackOption]] = None
+
+    @dataclass
+    class Flags:
+        NonStock: bool
+        IsNCNR: bool
+        IsSDS: bool
+        IsValueAdd: bool
+        IsMatched: bool
+        IsMarketPlace: bool
+        BoNotAllowed: bool
+        DisplayRegularLeadTime: bool
+        DisplayCheckActiveLeadTime: bool
+        MultipleCrefsForPart: bool
+        MultiplePartsForCref: bool
+        IsChecked: bool
+        IsEditable: bool
+        IsDeniedByCountry: bool
+        IsDeniedByCurrency: bool
+        IsDeniedByCustomerId: bool
+
+    @dataclass
+    class Substitute:
+        PartId: int
+        DigiKeyPartNumber: str
+        Manufacturer: str
+        ManufacturerPartNumber: str
+        Description: str
+        PartDetailUrl: str
+        SubstituteType: str
+        MinimumOrderQuantity: int
+        QuantityAvailable: str
+        TariffStatus: str
+        MasterPartId: int
+        UnitPrice: str
+
+    @dataclass
+    class AlternatePart:
+        PartId: int
+        DigiKeyPartNumber: str
+        Manufacturer: str
+        ManufacturerPartNumber: str
+        Description: str
+        PartDetailUrl: str
+        SubstituteType: str
+        MinimumOrderQuantity: int
+        QuantityAvailable: str
+        TariffStatus: str
+        MasterPartId: int
+        UnitPrice: str
+
+    @dataclass
+    class PartsAvailableForCrefItem:
+        ManufacturerPartnumber: str
+        Manufacturer: str
+        MinimumOrderQuantity: int
+        Description: str
+        QuantityAvailable: int
+
+    @dataclass
+    class Part:
+        PartId: int
+        UniqueId: str
+        CustomerReference: str
+        ReferenceDesignator: str
+        Notes: str
+        MinOrderQty: int
+        MaxOrderQty: int
+        OriginalPartNumber: str
+        RequestedPartNumber: str
+        DigiKeyPartNumber: str
+        ManufacturerPartNumber: str
+        RequestedManufacturerName: str
+        Manufacturer: str
+        Description: str
+        PartStatus: str
+        PartStatusCode: str
+        Availability: str | None
+        TariffCode: str
+        QuantityAvailable: int
+        SelectedQuantityIndex: int
+        Attrition: int | float
+        Quantities: List[Quantity]
+        VendorLeadWeeks: int
+        PartDetailUrl: str
+        PrimaryDatasheetUrl: str
+        ImageUrl: str
+        ThumbnailUrl: str
+        MarketPlaceSupplierLink: str
+        SupplierName: str
+        Substitutes: Optional[List[Substitute]]
+        AlternateParts: List[AlternatePart]
+        Flags: Any
+        ReachStatus: str
+        RohsStatusMessage: str
+        Eccn: str
+        Htsus: str
+        CountryOfOrigin: str
+        EnvironmentalDocs: Dict[str, str]
+        Category: str
+        PartsAvailableForCref: List[PartsAvailableForCrefItem]
+        CrefsAvailableForPart: List[str]
+
+    @dataclass
+    class PartsListResponse:
+        PartsList: List[Part]
+        TotalParts: int
 
     @mcp.tool()
     def get_all_lists(customer_id: CustomerId = "0") -> Dict[str, Any]:
@@ -327,14 +473,20 @@ def register_mylists_tools(mcp):
         limit: Optional[int] = None,
         assemblies: Optional[int] = None,
         include_attrition: bool = False,
-        customer_id: CustomerId = "0"
-    ) -> Dict[str, Any]:
+        customer_id: CustomerId = "0",
+        jmespath_query: Optional[str] = None
+    ) -> Union["PartsListResponse", Dict[str, Any]]:
         """Get all parts from a specific list with optional pagination.
 
         Retrieves detailed information about all parts in a list, including pricing,
         availability, lead times, datasheets, and compliance data. Supports pagination
         for large lists. The limit should never exceed 25 for this function; if it does,
         a structured JSON error object is returned instead of raising an exception.
+
+        Optional JMESPath filtering can be applied to pre-shape the response. When
+        `jmespath_query` is provided, the function returns a filtered JSON (dict)
+        according to the JMESPath expression. If not provided, a sensible default
+        query is used that selects commonly needed fields.
 
         ⚠️ Requires user authentication via oauth_start_login()
 
@@ -347,6 +499,9 @@ def register_mylists_tools(mcp):
             assemblies: Units per part, minimum 1 (default: 1)
             include_attrition: If True, includes attrition data in response (default: False)
             customer_id: DigiKey Customer ID (default: "0")
+            jmespath_query: Optional JMESPath expression to pre-filter and shape the
+                            response. If omitted, a default query returns only commonly
+                            used fields.
 
         Returns:
             Dictionary containing:
@@ -360,11 +515,11 @@ def register_mylists_tools(mcp):
             requests.HTTPError: If the API request fails (e.g., 404 if list not found)
 
         Example:
-            # Get first 50 parts from a list
-            parts = get_parts_by_list_id("abc123", start_index=0, limit=50)
-            print(f"Total parts: {parts['TotalParts']}")
-            for part in parts['PartsList']:
-                print(part['DigiKeyPartNumber'])
+            # Default filtered fields
+            result = get_parts_by_list_id("abc123", start_index=0, limit=25)
+            # Custom JMESPath to extract part IDs and pricing
+            q = '{TotalParts: TotalParts, Parts: PartsList[].{Id: PartId, Number: DigiKeyPartNumber, Prices: Quantities[].PackOptions[].{Unit: CalculatedUnitPrice, Ext: ExtendedPrice}}}'
+            result = get_parts_by_list_id("abc123", start_index=0, limit=25, jmespath_query=q)
         """
         _require_user_auth()
         
@@ -397,26 +552,224 @@ def register_mylists_tools(mcp):
             url += "?" + "&".join(params)
 
         response = _make_request("GET", url, headers, use_user_token=True)
-        
-        # Strip large/optional fields for cleaner payloads
-        try:
-            parts = response.get("PartsList")
-            if isinstance(parts, list):
-                for part in parts:
-                    if isinstance(part, dict):
-                        # Remove part-level substitutes
-                        part.pop("Substitutes", None)
-                        # Clean quantities array
-                        quantities = part.get("Quantities")
-                        if isinstance(quantities, list):
-                            for q in quantities:
-                                if isinstance(q, dict):
-                                    q.pop("PackOptions", None)
-        except Exception:
-            # If response isn't the expected shape, return as-is
-            return response
 
-        return response
+        # If a JMESPath query is provided or default selection should be applied,
+        # return the filtered dict directly.
+        default_query = (
+            '{TotalParts: TotalParts, Parts: PartsList[].{'
+            'ManufacturerPartNumber: ManufacturerPartNumber,'
+            'Manufacturer: Manufacturer,'
+            'Description: Description,'
+            'Availability: Availability,'
+            'StockStatus: PartStatus,'
+            'RequestedQuantity: Quantities[].QuantityRequested,'
+            'PackQuantity: Quantities[].PackOptions[].Quantity,'
+            'PackType: Quantities[].PackOptions[].PackType,'
+            'DigiKeyPartNumber: DigiKeyPartNumber,'
+            'UnitPrice: Quantities[].PackOptions[].CalculatedUnitPrice,'
+            'ExtendedPrice: Quantities[].PackOptions[].ExtendedPrice,'
+            'MinimumOrderQuantity: MinOrderQty,'
+            'RequestedPartNumber: RequestedPartNumber,'
+            'USImportTariff: Htsus,'
+            'Note: Notes,'
+            'PartStatus: PartStatus,'
+            'CountryOfOrigin: CountryOfOrigin,'
+            'OriginalPartNumber: OriginalPartNumber,'
+            'ImageUrl: ImageUrl,'
+            'ProductNotes: Notes}}'
+        )
+
+        query_to_use = jmespath_query or default_query
+        try:
+            filtered = jmespath.search(query_to_use, response)
+            if filtered is not None:
+                return filtered
+        except Exception:
+            # Fall back to schema build with error metadata
+            pass
+
+        # Build dataclass response according to schema, preserving extra fields
+        try:
+            raw_parts = response.get("PartsList", [])
+            total_parts = response.get("TotalParts", 0)
+
+            parts_dc: List[Part] = []
+            for p in raw_parts:
+                # Quantities
+                quantities_dc: List[Quantity] = []
+                for q in p.get("Quantities", []):
+                    pack_options_raw = q.get("PackOptions") or []
+                    pack_options_dc = []
+                    for po in pack_options_raw:
+                        pack_options_dc.append(
+                            PackOption(
+                                PartId=int(po.get("PartId", 0)),
+                                DigiKeyPartNumber=po.get("DigiKeyPartNumber", ""),
+                                ManufacturerPartNumber=po.get("ManufacturerPartNumber", ""),
+                                Quantity=int(po.get("Quantity", 0)),
+                                PackType=po.get("PackType", ""),
+                                QuantityAvailable=int(po.get("QuantityAvailable", 0)),
+                                MinimumOrderQuantity=int(po.get("MinimumOrderQuantity", 0)),
+                                CalculatedUnitPrice=float(po.get("CalculatedUnitPrice", 0.0)),
+                                ExtendedPrice=float(po.get("ExtendedPrice", 0.0)),
+                                BreakPrice=float(po.get("BreakPrice", 0.0)),
+                                BreakQuantity=int(po.get("BreakQuantity", 0)),
+                                IsUpsell=bool(po.get("IsUpsell", False)),
+                                ValueAdditionalFee=float(po.get("ValueAdditionalFee", 0.0)),
+                                SubPackOptions=po.get("SubPackOptions", []) or [],
+                                FormattedUnitPrice=po.get("FormattedUnitPrice", ""),
+                                FormattedExtendedPrice=po.get("FormattedExtendedPrice", ""),
+                            )
+                        )
+
+                    quantities_dc.append(
+                        Quantity(
+                            QuantityRequested=int(q.get("QuantityRequested", 0)),
+                            CalculatedQuantity=int(q.get("CalculatedQuantity", 0)),
+                            TargetPrice=(q.get("TargetPrice") if q.get("TargetPrice") is not None else None),
+                            SelectedPackType=q.get("SelectedPackType", ""),
+                            SelectedSubPackType=q.get("SelectedSubPackType", ""),
+                            IsInactive=bool(q.get("IsInactive", False)),
+                            SelectedPackOptionIndex=int(q.get("SelectedPackOptionIndex", 0)),
+                            SelectedSubPackOptionIndex=int(q.get("SelectedSubPackOptionIndex", 0)),
+                            PackOptions=pack_options_dc or None,
+                        )
+                    )
+
+                flags_raw = p.get("Flags", {})
+                flags_dc = Flags(
+                    NonStock=bool(flags_raw.get("NonStock", False)),
+                    IsNCNR=bool(flags_raw.get("IsNCNR", False)),
+                    IsSDS=bool(flags_raw.get("IsSDS", False)),
+                    IsValueAdd=bool(flags_raw.get("IsValueAdd", False)),
+                    IsMatched=bool(flags_raw.get("IsMatched", False)),
+                    IsMarketPlace=bool(flags_raw.get("IsMarketPlace", False)),
+                    BoNotAllowed=bool(flags_raw.get("BoNotAllowed", False)),
+                    DisplayRegularLeadTime=bool(flags_raw.get("DisplayRegularLeadTime", False)),
+                    DisplayCheckActiveLeadTime=bool(flags_raw.get("DisplayCheckActiveLeadTime", False)),
+                    MultipleCrefsForPart=bool(flags_raw.get("MultipleCrefsForPart", False)),
+                    MultiplePartsForCref=bool(flags_raw.get("MultiplePartsForCref", False)),
+                    IsChecked=bool(flags_raw.get("IsChecked", False)),
+                    IsEditable=bool(flags_raw.get("IsEditable", False)),
+                    IsDeniedByCountry=bool(flags_raw.get("IsDeniedByCountry", False)),
+                    IsDeniedByCurrency=bool(flags_raw.get("IsDeniedByCurrency", False)),
+                    IsDeniedByCustomerId=bool(flags_raw.get("IsDeniedByCustomerId", False)),
+                )
+
+                # Substitutes
+                subs_raw = p.get("Substitutes") or []
+                substitutes_dc = []
+                for s in subs_raw:
+                    substitutes_dc.append(
+                        Substitute(
+                            PartId=int(s.get("PartId", 0)),
+                            DigiKeyPartNumber=s.get("DigiKeyPartNumber", ""),
+                            Manufacturer=s.get("Manufacturer", ""),
+                            ManufacturerPartNumber=s.get("ManufacturerPartNumber", ""),
+                            Description=s.get("Description", ""),
+                            PartDetailUrl=s.get("PartDetailUrl", ""),
+                            SubstituteType=s.get("SubstituteType", ""),
+                            MinimumOrderQuantity=int(s.get("MinimumOrderQuantity", 0)),
+                            QuantityAvailable=str(s.get("QuantityAvailable", "")),
+                            TariffStatus=s.get("TariffStatus", ""),
+                            MasterPartId=int(s.get("MasterPartId", 0)),
+                            UnitPrice=s.get("UnitPrice", ""),
+                        )
+                    )
+
+                # AlternateParts
+                alt_raw = p.get("AlternateParts") or []
+                alt_dc = []
+                for a in alt_raw:
+                    alt_dc.append(
+                        AlternatePart(
+                            PartId=int(a.get("PartId", 0)),
+                            DigiKeyPartNumber=a.get("DigiKeyPartNumber", ""),
+                            Manufacturer=a.get("Manufacturer", ""),
+                            ManufacturerPartNumber=a.get("ManufacturerPartNumber", ""),
+                            Description=a.get("Description", ""),
+                            PartDetailUrl=a.get("PartDetailUrl", ""),
+                            SubstituteType=a.get("SubstituteType", ""),
+                            MinimumOrderQuantity=int(a.get("MinimumOrderQuantity", 0)),
+                            QuantityAvailable=str(a.get("QuantityAvailable", "")),
+                            TariffStatus=a.get("TariffStatus", ""),
+                            MasterPartId=int(a.get("MasterPartId", 0)),
+                            UnitPrice=a.get("UnitPrice", ""),
+                        )
+                    )
+
+                # PartsAvailableForCref
+                pac_raw = p.get("PartsAvailableForCref") or []
+                pac_dc = []
+                for item in pac_raw:
+                    pac_dc.append(
+                        PartsAvailableForCrefItem(
+                            ManufacturerPartnumber=item.get("ManufacturerPartnumber", ""),
+                            Manufacturer=item.get("Manufacturer", ""),
+                            MinimumOrderQuantity=int(item.get("MinimumOrderQuantity", 0)),
+                            Description=item.get("Description", ""),
+                            QuantityAvailable=int(item.get("QuantityAvailable", 0)),
+                        )
+                    )
+
+                parts_dc.append(
+                    Part(
+                        PartId=int(p.get("PartId", 0)),
+                        UniqueId=p.get("UniqueId", ""),
+                        CustomerReference=p.get("CustomerReference", ""),
+                        ReferenceDesignator=p.get("ReferenceDesignator", ""),
+                        Notes=p.get("Notes", ""),
+                        MinOrderQty=int(p.get("MinOrderQty", 0)),
+                        MaxOrderQty=int(p.get("MaxOrderQty", 0)),
+                        OriginalPartNumber=p.get("OriginalPartNumber", ""),
+                        RequestedPartNumber=p.get("RequestedPartNumber", ""),
+                        DigiKeyPartNumber=p.get("DigiKeyPartNumber", ""),
+                        ManufacturerPartNumber=p.get("ManufacturerPartNumber", ""),
+                        RequestedManufacturerName=p.get("RequestedManufacturerName", ""),
+                        Manufacturer=p.get("Manufacturer", ""),
+                        Description=p.get("Description", ""),
+                        PartStatus=p.get("PartStatus", ""),
+                        PartStatusCode=str(p.get("PartStatusCode", "")),
+                        Availability=p.get("Availability"),
+                        TariffCode=str(p.get("TariffCode", "")),
+                        QuantityAvailable=int(p.get("QuantityAvailable", 0)),
+                        SelectedQuantityIndex=int(p.get("SelectedQuantityIndex", 0)),
+                        Attrition=int(p.get("Attrition", 0)),
+                        Quantities=quantities_dc,
+                        VendorLeadWeeks=int(p.get("VendorLeadWeeks", 0)),
+                        PartDetailUrl=p.get("PartDetailUrl", ""),
+                        PrimaryDatasheetUrl=p.get("PrimaryDatasheetUrl", ""),
+                        ImageUrl=p.get("ImageUrl", ""),
+                        ThumbnailUrl=p.get("ThumbnailUrl", ""),
+                        MarketPlaceSupplierLink=p.get("MarketPlaceSupplierLink", ""),
+                        SupplierName=p.get("SupplierName", ""),
+                        Substitutes=substitutes_dc or None,
+                        AlternateParts=alt_dc,
+                        Flags=flags_dc,
+                        ReachStatus=p.get("ReachStatus", ""),
+                        RohsStatusMessage=p.get("RohsStatusMessage", ""),
+                        Eccn=p.get("Eccn", ""),
+                        Htsus=p.get("Htsus", ""),
+                        CountryOfOrigin=p.get("CountryOfOrigin", ""),
+                        EnvironmentalDocs=p.get("EnvironmentalDocs", {}) or {},
+                        Category=p.get("Category", ""),
+                        PartsAvailableForCref=pac_dc,
+                        CrefsAvailableForPart=[str(x) for x in (p.get("CrefsAvailableForPart", []) or [])],
+                    )
+                )
+
+            result_dc = PartsListResponse(PartsList=parts_dc, TotalParts=int(total_parts))
+            return result_dc
+        except Exception as e:
+            return {
+                "error": {
+                    "type": "PartsListSchemaBuildError",
+                    "code": "SCHEMA_BUILD_FAILED",
+                    "message": str(e),
+                    "listId": list_id,
+                    "originalResponse": response
+                }
+            }
 
     @mcp.tool()
     def add_parts_to_list(

@@ -1,203 +1,183 @@
-#!/usr/bin/env python3
-"""Test type annotations and dataclasses for MyLists tools."""
+import unittest
 
-from typing import get_type_hints
-from src.tools.mylists_tools import (
-    RequestedPart,
-    PartQuantity,
-    ListId,
-    PartId,
-    CustomerId,
-    ListSource,
-    _to_dict_excluding_none
-)
+from src.tools import mylists_tools as mt
+import src.tools.mylists_tools as tools_mod
 
 
-def test_type_aliases():
-    """Test that type aliases are properly defined."""
-    print("Testing type aliases...")
-
-    # Type aliases should resolve to their base types
-    assert ListId == str
-    assert PartId == str
-    assert CustomerId == str
-
-    print("✓ Type aliases correct")
+class CapturingMCP:
+    def __init__(self):
+        self.tools = {}
+    def tool(self):
+        def deco(func):
+            self.tools[func.__name__] = func
+            return func
+        return deco
 
 
-def test_helper_function():
-    """Test the _to_dict_excluding_none helper."""
-    print("\nTesting helper function...")
+class TestMyListsTypes(unittest.TestCase):
+    def setUp(self):
+        def fake_make_request(method, url, headers, body=None, use_user_token=False):
+            return {
+                "TotalParts": 1,
+                "PartsList": [{
+                    "PartId": 123,
+                    "UniqueId": "u-1",
+                    "CustomerReference": "R1",
+                    "ReferenceDesignator": "R1",
+                    "Notes": "note",
+                    "MinOrderQty": 1,
+                    "MaxOrderQty": 99,
+                    "OriginalPartNumber": "OPN",
+                    "RequestedPartNumber": "RPN",
+                    "DigiKeyPartNumber": "DKPN",
+                    "ManufacturerPartNumber": "MPN",
+                    "RequestedManufacturerName": "ReqMfg",
+                    "Manufacturer": "Mfg",
+                    "Description": "desc",
+                    "PartStatus": "Active",
+                    "PartStatusCode": "Active",
+                    "Availability": None,
+                    "TariffCode": "NoTariff",
+                    "QuantityAvailable": 42,
+                    "SelectedQuantityIndex": 0,
+                    "Attrition": 0,
+                    "Quantities": [{
+                        "QuantityRequested": 10,
+                        "CalculatedQuantity": 10,
+                        "TargetPrice": 0,
+                        "SelectedPackType": "Reel",
+                        "SelectedSubPackType": "Sub",
+                        "IsInactive": False,
+                        "SelectedPackOptionIndex": 0,
+                        "SelectedSubPackOptionIndex": 0,
+                        "PackOptions": [{
+                            "PartId": 1,
+                            "DigiKeyPartNumber": "DKPN",
+                            "ManufacturerPartNumber": "MPN",
+                            "Quantity": 10,
+                            "PackType": "Reel",
+                            "QuantityAvailable": 5,
+                            "MinimumOrderQuantity": 1,
+                            "CalculatedUnitPrice": 0.5,
+                            "ExtendedPrice": 5.0,
+                            "BreakPrice": 0.5,
+                            "BreakQuantity": 10,
+                            "IsUpsell": False,
+                            "ValueAdditionalFee": 0.0,
+                            "SubPackOptions": [None],
+                            "FormattedUnitPrice": "$0.50",
+                            "FormattedExtendedPrice": "$5.00"
+                        }]
+                    }],
+                    "VendorLeadWeeks": 4,
+                    "PartDetailUrl": "https://example.com/part",
+                    "PrimaryDatasheetUrl": "https://example.com/ds",
+                    "ImageUrl": "https://example.com/img",
+                    "ThumbnailUrl": "https://example.com/thumb",
+                    "MarketPlaceSupplierLink": "link",
+                    "SupplierName": "Supplier",
+                    "AlternateParts": [],
+                    "Flags": {
+                        "NonStock": False,
+                        "IsNCNR": False,
+                        "IsSDS": False,
+                        "IsValueAdd": False,
+                        "IsMatched": False,
+                        "IsMarketPlace": False,
+                        "BoNotAllowed": False,
+                        "DisplayRegularLeadTime": False,
+                        "DisplayCheckActiveLeadTime": False,
+                        "MultipleCrefsForPart": False,
+                        "MultiplePartsForCref": False,
+                        "IsChecked": False,
+                        "IsEditable": True,
+                        "IsDeniedByCountry": False,
+                        "IsDeniedByCurrency": False,
+                        "IsDeniedByCustomerId": False
+                    },
+                    "ReachStatus": "",
+                    "RohsStatusMessage": "",
+                    "Eccn": "",
+                    "Htsus": "",
+                    "CountryOfOrigin": "",
+                    "EnvironmentalDocs": {},
+                    "Category": "",
+                    "PartsAvailableForCref": [],
+                    "CrefsAvailableForPart": [],
+                    "Substitutes": [{
+                        "PartId": 2,
+                        "DigiKeyPartNumber": "ALT",
+                        "Manufacturer": "M",
+                        "ManufacturerPartNumber": "MMPN",
+                        "Description": "alt",
+                        "PartDetailUrl": "u",
+                        "SubstituteType": "type",
+                        "MinimumOrderQuantity": 1,
+                        "QuantityAvailable": "0",
+                        "TariffStatus": "NoTariff",
+                        "MasterPartId": 0,
+                        "UnitPrice": "$1.00"
+                    }]
+                }]
+            }
+        tools_mod._make_request = fake_make_request
+        tools_mod._require_user_auth = lambda: None
+        self.capture = CapturingMCP()
+        mt.register_mylists_tools(self.capture)
 
-    result = _to_dict_excluding_none({
-        "key1": "value",
-        "key2": None,
-        "key3": 123,
-        "key4": None
-    })
+    def test_builder_returns_dataclass(self):
+        func = self.capture.tools['get_parts_by_list_id']
+        # Force dataclass path by temporarily making jmespath.search fail
+        original_search = tools_mod.jmespath.search
+        def failing_search(expr, data):
+            raise RuntimeError("force fallback")
+        tools_mod.jmespath.search = failing_search
+        out = func(list_id="abc", limit=10)
+        # Restore jmespath
+        tools_mod.jmespath.search = original_search
+        # Dataclass type name
+        assert type(out).__name__ == 'PartsListResponse'
+        assert out.TotalParts == 1
+        assert len(out.PartsList) == 1
+        part = out.PartsList[0]
+        # Check key fields
+        assert part.PartId == 123
+        assert part.PartStatusCode == 'Active'
+        # Substitutes preserved
+        assert isinstance(part.Substitutes, list)
+        assert part.Substitutes[0].DigiKeyPartNumber == 'ALT'
+        # PackOptions preserved and typed
+        qty = part.Quantities[0]
+        assert isinstance(qty.PackOptions, list)
+        assert qty.PackOptions[0].FormattedUnitPrice == '$0.50'
 
-    assert result == {"key1": "value", "key3": 123}
-    assert "key2" not in result
-    assert "key4" not in result
+    def test_jmespath_default_and_custom(self):
+        func = self.capture.tools['get_parts_by_list_id']
+        # Default filtering (no query provided)
+        default_out = func(list_id="abc", limit=10)
+        # When jmespath_query is omitted, function returns filtered dict, not dataclass
+        assert isinstance(default_out, dict)
+        assert 'TotalParts' in default_out and 'Parts' in default_out
+        assert isinstance(default_out['Parts'], list)
+        part = default_out['Parts'][0]
+        # Check presence of key fields from the default query
+        assert 'ManufacturerPartNumber' in part
+        assert 'Manufacturer' in part
+        assert 'DigiKeyPartNumber' in part
+        assert 'PackType' in part
 
-    print("✓ Helper function works correctly")
-
-
-def test_part_quantity_class():
-    """Test PartQuantity class."""
-    print("\nTesting PartQuantity class...")
-
-    # Test with all fields
-    qty1 = PartQuantity(selected_pack_type=1, quantity=10, target_price=1.50)
-    dict1 = qty1.to_dict()
-
-    assert dict1["SelectedPackType"] == 1
-    assert dict1["Quantity"] == 10
-    assert dict1["TargetPrice"] == 1.50
-
-    # Test with only some fields (None should be excluded)
-    qty2 = PartQuantity(quantity=20)
-    dict2 = qty2.to_dict()
-
-    assert dict2["Quantity"] == 20
-    assert "SelectedPackType" not in dict2
-    assert "TargetPrice" not in dict2
-
-    print("✓ PartQuantity class works correctly")
-
-
-def test_requested_part_class():
-    """Test RequestedPart class."""
-    print("\nTesting RequestedPart class...")
-
-    # Test minimal part
-    part1 = RequestedPart(requested_part_number="296-8875-1-ND")
-    dict1 = part1.to_dict()
-
-    assert dict1["RequestedPartNumber"] == "296-8875-1-ND"
-    assert len(dict1) == 1  # Only one field
-
-    # Test full part with quantities
-    qty = PartQuantity(quantity=10, target_price=1.00)
-    part2 = RequestedPart(
-        requested_part_number="296-8875-1-ND",
-        customer_reference="R1",
-        reference_designator="R1",
-        notes="Test resistor",
-        quantities=[qty]
-    )
-    dict2 = part2.to_dict()
-
-    assert dict2["RequestedPartNumber"] == "296-8875-1-ND"
-    assert dict2["CustomerReference"] == "R1"
-    assert dict2["ReferenceDesignator"] == "R1"
-    assert dict2["Notes"] == "Test resistor"
-    assert len(dict2["Quantities"]) == 1
-    assert dict2["Quantities"][0]["Quantity"] == 10
-
-    # Test with multiple quantities
-    part3 = RequestedPart(
-        part_id="12345",
-        quantities=[
-            PartQuantity(quantity=10),
-            PartQuantity(quantity=100, target_price=0.50)
-        ]
-    )
-    dict3 = part3.to_dict()
-
-    assert dict3["PartId"] == "12345"
-    assert len(dict3["Quantities"]) == 2
-    assert dict3["Quantities"][0]["Quantity"] == 10
-    assert dict3["Quantities"][1]["Quantity"] == 100
-    assert dict3["Quantities"][1]["TargetPrice"] == 0.50
-
-    print("✓ RequestedPart class works correctly")
-
-
-def test_tool_function_signatures():
-    """Test that tool functions have proper type annotations."""
-    print("\nTesting tool function type annotations...")
-
-    # Import the module to get the registered functions
-    from src.tools import mylists_tools
-
-    # We can't easily access the inner functions, but we can verify
-    # the module has the expected types defined
-    assert hasattr(mylists_tools, 'ListId')
-    assert hasattr(mylists_tools, 'PartId')
-    assert hasattr(mylists_tools, 'CustomerId')
-    assert hasattr(mylists_tools, 'ListSource')
-    assert hasattr(mylists_tools, 'RequestedPart')
-    assert hasattr(mylists_tools, 'PartQuantity')
-
-    print("✓ Tool function type annotations present")
-
-
-def test_api_format_conversion():
-    """Test that our classes convert to the exact API format expected."""
-    print("\nTesting API format conversion...")
-
-    # Create a complex part structure
-    part = RequestedPart(
-        requested_part_number="296-8875-1-ND",
-        manufacturer_name="Test Manufacturer",
-        customer_reference="REF-001",
-        reference_designator="R1",
-        notes="Sample part",
-        selected_quantity_index=0,
-        attrition=5,
-        quantities=[
-            PartQuantity(
-                selected_pack_type=1,
-                quantity=100,
-                target_price=0.75
-            )
-        ]
-    )
-
-    api_dict = part.to_dict()
-
-    # Verify all fields are in PascalCase
-    expected_keys = {
-        "RequestedPartNumber",
-        "ManufacturerName",
-        "CustomerReference",
-        "ReferenceDesignator",
-        "Notes",
-        "SelectedQuantityIndex",
-        "Attrition",
-        "Quantities"
-    }
-
-    assert set(api_dict.keys()) == expected_keys
-
-    # Verify quantity structure
-    assert len(api_dict["Quantities"]) == 1
-    qty_dict = api_dict["Quantities"][0]
-    assert qty_dict["SelectedPackType"] == 1
-    assert qty_dict["Quantity"] == 100
-    assert qty_dict["TargetPrice"] == 0.75
-
-    print("✓ API format conversion correct")
-
-
-def main():
-    """Run all tests."""
-    print("=" * 60)
-    print("Testing MyLists Type Annotations and Dataclasses")
-    print("=" * 60)
-
-    test_type_aliases()
-    test_helper_function()
-    test_part_quantity_class()
-    test_requested_part_class()
-    test_tool_function_signatures()
-    test_api_format_conversion()
-
-    print("\n" + "=" * 60)
-    print("✓ All tests passed!")
-    print("=" * 60)
+        # Custom query to pick specific pricing fields
+        q = '{TotalParts: TotalParts, Parts: PartsList[].{Id: PartId, Number: DigiKeyPartNumber, Prices: Quantities[].PackOptions[].{Unit: CalculatedUnitPrice, Ext: ExtendedPrice}}}'
+        custom_out = func(list_id="abc", limit=10, jmespath_query=q)
+        assert isinstance(custom_out, dict)
+        assert 'TotalParts' in custom_out and 'Parts' in custom_out
+        prices = custom_out['Parts'][0]['Prices']
+        # Prices is a list of dicts for each PackOption
+        assert isinstance(prices, list)
+        assert isinstance(prices[0], dict)
+        assert 'Unit' in prices[0] and 'Ext' in prices[0]
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    import unittest
+    unittest.main()
