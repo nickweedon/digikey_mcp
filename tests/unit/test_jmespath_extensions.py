@@ -330,3 +330,186 @@ class TestEdgeCases:
             data
         )
         assert result == "abc-def"
+
+
+class TestStrFunction:
+    """Test cases for the str() custom function."""
+
+    def test_int_to_string(self):
+        """Test converting integer to string."""
+        data = {"value": 100}
+        result = search_with_custom_functions("str(value)", data)
+        assert result == "100"
+        assert isinstance(result, str)
+
+    def test_float_to_string(self):
+        """Test converting float to string."""
+        data = {"value": 42.7}
+        result = search_with_custom_functions("str(value)", data)
+        assert result == "42.7"
+        assert isinstance(result, str)
+
+    def test_boolean_to_string(self):
+        """Test converting boolean to string."""
+        data = {"value": True}
+        result = search_with_custom_functions("str(value)", data)
+        assert result == "true"
+
+        data = {"value": False}
+        result = search_with_custom_functions("str(value)", data)
+        assert result == "false"
+
+    def test_null_to_string(self):
+        """Test converting null to string."""
+        data = {"value": None}
+        result = search_with_custom_functions("str(value)", data)
+        assert result == "null"
+
+    def test_string_unchanged(self):
+        """Test that string input returns unchanged."""
+        data = {"value": "already a string"}
+        result = search_with_custom_functions("str(value)", data)
+        assert result == "already a string"
+
+    def test_str_for_concatenation(self):
+        """Test str() in projection for formatting."""
+        data = {
+            "products": [
+                {"name": "Resistor", "value": 100, "unit": "ohm"},
+                {"name": "Capacitor", "value": 47, "unit": "uF"}
+            ]
+        }
+        # Note: JMESPath doesn't have string concatenation, but str() prepares values
+        result = search_with_custom_functions(
+            "products[].{Name: name, ValueStr: str(value)}",
+            data
+        )
+        assert len(result) == 2
+        assert result[0]["ValueStr"] == "100"
+        assert result[1]["ValueStr"] == "47"
+
+
+class TestNvlFunction:
+    """Test cases for the nvl() custom function."""
+
+    def test_null_returns_default(self):
+        """Test that null value returns default."""
+        data = {"value": None}
+        result = search_with_custom_functions("nvl(value, 'N/A')", data)
+        assert result == "N/A"
+
+    def test_non_null_returns_original(self):
+        """Test that non-null value returns original."""
+        data = {"value": "existing"}
+        result = search_with_custom_functions("nvl(value, 'default')", data)
+        assert result == "existing"
+
+    def test_nvl_with_int_conversion(self):
+        """Test nvl with int() conversion for safe defaults."""
+        data = {"price": "invalid"}
+        result = search_with_custom_functions("nvl(int(price), `0`)", data)
+        assert result == 0
+
+    def test_nvl_with_valid_int_conversion(self):
+        """Test nvl with successful int() conversion."""
+        data = {"price": "100"}
+        result = search_with_custom_functions("nvl(int(price), `0`)", data)
+        assert result == 100
+
+    def test_nvl_with_numeric_default(self):
+        """Test nvl with numeric default value."""
+        data = {"value": None}
+        result = search_with_custom_functions("nvl(value, `999`)", data)
+        assert result == 999
+
+    def test_nvl_with_zero_value(self):
+        """Test that nvl preserves zero (doesn't treat it as null)."""
+        data = {"value": 0}
+        result = search_with_custom_functions("nvl(value, `999`)", data)
+        assert result == 0
+
+    def test_nvl_with_empty_string(self):
+        """Test that nvl preserves empty string (doesn't treat it as null)."""
+        data = {"value": ""}
+        result = search_with_custom_functions("nvl(value, 'default')", data)
+        assert result == ""
+
+    def test_nvl_in_projection(self):
+        """Test nvl in array projection."""
+        data = {
+            "products": [
+                {"name": "Product 1", "stock": None},
+                {"name": "Product 2", "stock": 50},
+                {"name": "Product 3", "stock": None}
+            ]
+        }
+        result = search_with_custom_functions(
+            "products[].{Name: name, Stock: nvl(stock, `0`)}",
+            data
+        )
+        assert len(result) == 3
+        assert result[0]["Stock"] == 0
+        assert result[1]["Stock"] == 50
+        assert result[2]["Stock"] == 0
+
+    def test_nvl_with_missing_field(self):
+        """Test nvl when field doesn't exist (returns null)."""
+        data = {"other_field": "value"}
+        result = search_with_custom_functions("nvl(missing_field, 'default')", data)
+        assert result == "default"
+
+
+class TestCombinedNewFunctions:
+    """Test cases for combining str() and nvl() with existing functions."""
+
+    def test_str_with_int_conversion(self):
+        """Test converting int result back to string."""
+        data = {"value": "100"}
+        result = search_with_custom_functions("str(int(value))", data)
+        assert result == "100"
+        assert isinstance(result, str)
+
+    def test_nvl_with_regex_replace_and_int(self):
+        """Test complete pipeline with nvl for safe defaults."""
+        data = {
+            "components": [
+                {"resistance": "100 ohm"},
+                {"resistance": "invalid"},
+                {"resistance": "220 ohm"}
+            ]
+        }
+        query = "components[].nvl(int(regex_replace(' ohm$', '', resistance)), `0`)"
+        result = search_with_custom_functions(query, data)
+
+        assert len(result) == 3
+        assert result[0] == 100
+        assert result[1] == 0  # Invalid conversion defaults to 0
+        assert result[2] == 220
+
+    def test_complex_query_with_all_functions(self):
+        """Test complex query using all custom functions."""
+        data = {
+            "parts": [
+                {"pn": "R100K", "price": "10.50", "stock": None},
+                {"pn": "C220U", "price": None, "stock": 50},
+                {"pn": "L470H", "price": "5.25", "stock": 0}
+            ]
+        }
+        query = """
+        parts[].{
+            PartNumber: pn,
+            NumericCode: str(nvl(int(regex_replace('[^0-9]', '', pn)), `0`)),
+            Price: nvl(price, 'N/A'),
+            Stock: nvl(stock, `0`)
+        }
+        """
+        result = search_with_custom_functions(query, data)
+
+        assert len(result) == 3
+        assert result[0]["NumericCode"] == "100"
+        assert result[0]["Price"] == "10.50"
+        assert result[0]["Stock"] == 0
+
+        assert result[1]["NumericCode"] == "220"
+        assert result[1]["Price"] == "N/A"
+        assert result[1]["Stock"] == 50

@@ -606,8 +606,19 @@ def register_mylists_tools(mcp):
               Example: int('100') → 100
               Example: int('invalid') → null
 
+            - str(value): Converts any value to string
+              Example: str(100) → '100'
+              Example: str(null) → 'null'
+
+            - nvl(value, default): Returns default if value is null (like Oracle NVL)
+              Example: nvl(int(Field), 0) → 0 if Field is not a valid number
+              Example: nvl(MissingField, 'N/A') → 'N/A'
+
             Combined usage for filtering by numeric values:
               PartsList[?int(regex_replace('[^0-9]', '', QuantityField)) >= 100]
+
+            Using nvl() for safe defaults:
+              PartsList[].{Part: DigiKeyPartNumber, Qty: nvl(int(RequestedQuantity), 0)}
 
         Raises:
             ValueError: If user is not authenticated

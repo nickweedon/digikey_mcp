@@ -4,6 +4,8 @@ Custom JMESPath functions for enhanced query capabilities.
 This module provides custom JMESPath functions to enable:
 - regex_replace(): Text transformation via regex find-and-replace
 - int(): String to integer conversion with safe null handling
+- str(): Convert any value to string
+- nvl(): Provide default value when expression is null (like Oracle NVL)
 
 These functions enable LLMs to construct queries that transform and filter
 component values like "100 ohm" → 100 for numeric range comparisons.
@@ -83,6 +85,61 @@ class CustomFunctions(functions.Functions):
         except (ValueError, TypeError):
             return None
 
+    @functions.signature({'types': ['string', 'number', 'boolean', 'array', 'object', 'null']})
+    def _func_str(self, value: Any) -> str:
+        """
+        Convert a value to a string.
+
+        Args:
+            value: Any value to convert to string
+
+        Returns:
+            String representation of the value
+
+        Examples:
+            str(100) → '100'
+            str(42.7) → '42.7'
+            str(true) → 'true'
+            str(null) → 'null'
+
+        Note:
+            This is useful for concatenating numeric values or converting
+            them for regex operations.
+        """
+        if value is None:
+            return 'null'
+        if isinstance(value, bool):
+            return 'true' if value else 'false'
+        return str(value)
+
+    @functions.signature(
+        {'types': ['string', 'number', 'boolean', 'array', 'object', 'null']},
+        {'types': ['string', 'number', 'boolean', 'array', 'object']}
+    )
+    def _func_nvl(self, value: Any, default: Any) -> Any:
+        """
+        Return default value if value is null (like Oracle's NVL function).
+
+        Args:
+            value: Value to check for null
+            default: Default value to return if value is null
+
+        Returns:
+            Original value if not null, otherwise default value
+
+        Examples:
+            nvl(null, 'N/A') → 'N/A'
+            nvl('existing', 'default') → 'existing'
+            nvl(int(Field), 0) → 0 if Field is not a valid number
+
+        Note:
+            This is particularly useful with int() conversions:
+            nvl(int(PriceString), 0) ensures a numeric value is always returned
+        """
+        if value is None:
+            return default
+        return value
+
 
 # Create a shared options object with custom functions registered
 _custom_options = jmespath.Options(custom_functions=CustomFunctions())
@@ -93,7 +150,7 @@ def search_with_custom_functions(expression: str, data: Any) -> Any:
     Execute a JMESPath query with custom functions enabled.
 
     This is a drop-in replacement for jmespath.search() that includes
-    custom regex_replace() and int() functions.
+    custom regex_replace(), int(), str(), and nvl() functions.
 
     Args:
         expression: JMESPath query expression
@@ -111,5 +168,9 @@ def search_with_custom_functions(expression: str, data: Any) -> Any:
         >>> query = "products[?int(regex_replace(' ohm$', '', resistance)) >= 100]"
         >>> search_with_custom_functions(query, data)
         [{"resistance": "150 ohm"}]
+
+        >>> data = {"price": null}
+        >>> search_with_custom_functions("nvl(price, 'N/A')", data)
+        'N/A'
     """
     return jmespath.search(expression, data, options=_custom_options)

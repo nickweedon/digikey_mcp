@@ -321,9 +321,20 @@ def register_product_tools(mcp):
               Example: int('100') → 100
               Example: int('invalid') → null
 
+            - str(value): Converts any value to string
+              Example: str(100) → '100'
+              Example: str(null) → 'null'
+
+            - nvl(value, default): Returns default if value is null (like Oracle NVL)
+              Example: nvl(int(Field), 0) → 0 if Field is not a valid number
+              Example: nvl(MissingField, 'N/A') → 'N/A'
+
             Combined usage for component value filtering:
               Products[?int(regex_replace(' ohm$', '', ParameterValue)) >= 50 &&
                         int(regex_replace(' ohm$', '', ParameterValue)) <= 200]
+
+            Using nvl() for safe defaults:
+              Products[].{Part: PartNumber, Value: nvl(int(regex_replace(' ohm$', '', Resistance)), 0)}
 
         Example:
             # Default filtered fields
