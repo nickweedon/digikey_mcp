@@ -362,8 +362,14 @@ SAMPLE_DIGIREEL_PRICING: Dict[str, Any] = {
 }
 
 
-def get_keyword_search_response(keywords: str, limit: int = 5) -> Dict[str, Any]:
-    """Generate a keyword search response."""
+def get_keyword_search_response(keywords: str, limit: int = None, offset: int = 0) -> Dict[str, Any]:
+    """Generate a keyword search response.
+
+    Args:
+        keywords: Search keywords
+        limit: Maximum number of results per page. If None, returns all matching products.
+        offset: Starting index for pagination (default: 0)
+    """
     # Filter products that match keywords (simple substring match)
     keywords_lower = keywords.lower()
     matching = []
@@ -380,8 +386,13 @@ def get_keyword_search_response(keywords: str, limit: int = 5) -> Dict[str, Any]
     if not matching:
         matching = SAMPLE_PRODUCTS.copy()
 
-    # Apply limit
-    results = matching[:limit]
+    # Apply offset and limit for pagination
+    if offset >= len(matching):
+        # Offset beyond available products, return empty
+        results = []
+    else:
+        end_index = offset + limit if limit is not None else len(matching)
+        results = matching[offset:end_index]
 
     return {
         "Products": results,

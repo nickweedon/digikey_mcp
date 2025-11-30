@@ -429,11 +429,16 @@ class TestProductToolsWithFakeServer:
         query = "Products[].{PartNum: regex_replace('[^A-Z0-9]', '', ManufacturerProductNumber)}"
         result = keyword_search(keywords="resistor", limit=5, jmespath_query=query)
 
-        assert isinstance(result, list)
-        if result:
-            assert "PartNum" in result[0]
+        # Result should be a dict with pagination metadata
+        assert isinstance(result, dict)
+        assert "Products" in result
+        assert "cache_key" in result
+        products = result["Products"]
+        assert isinstance(products, list)
+        if products:
+            assert "PartNum" in products[0]
             # Verify that the part number has been cleaned (no special chars)
-            assert all(c.isalnum() for c in result[0]["PartNum"] if c)
+            assert all(c.isalnum() for c in products[0]["PartNum"] if c)
 
     @pytest.mark.unit
     def test_keyword_search_with_int_conversion(
@@ -452,12 +457,17 @@ class TestProductToolsWithFakeServer:
         query = "Products[].{Part: ManufacturerProductNumber, Qty: int(QuantityAvailable)}"
         result = keyword_search(keywords="resistor", limit=5, jmespath_query=query)
 
-        assert isinstance(result, list)
-        if result:
-            assert "Part" in result[0]
-            assert "Qty" in result[0]
+        # Result should be a dict with pagination metadata
+        assert isinstance(result, dict)
+        assert "Products" in result
+        assert "cache_key" in result
+        products = result["Products"]
+        assert isinstance(products, list)
+        if products:
+            assert "Part" in products[0]
+            assert "Qty" in products[0]
             # Verify that Qty is an integer (or null if conversion failed)
-            assert result[0]["Qty"] is None or isinstance(result[0]["Qty"], int)
+            assert products[0]["Qty"] is None or isinstance(products[0]["Qty"], int)
 
     @pytest.mark.unit
     def test_keyword_search_with_combined_functions(
@@ -483,12 +493,17 @@ class TestProductToolsWithFakeServer:
         """
         result = keyword_search(keywords="resistor", limit=5, jmespath_query=query)
 
-        assert isinstance(result, list)
-        if result:
-            assert "Part" in result[0]
-            assert "QtyNumeric" in result[0]
+        # Result should be a dict with pagination metadata
+        assert isinstance(result, dict)
+        assert "Products" in result
+        assert "cache_key" in result
+        products = result["Products"]
+        assert isinstance(products, list)
+        if products:
+            assert "Part" in products[0]
+            assert "QtyNumeric" in products[0]
             # QtyNumeric should be an integer or null
-            assert result[0]["QtyNumeric"] is None or isinstance(result[0]["QtyNumeric"], int)
+            assert products[0]["QtyNumeric"] is None or isinstance(products[0]["QtyNumeric"], int)
 
     @pytest.mark.unit
     def test_keyword_search_filter_by_converted_value(
@@ -507,9 +522,14 @@ class TestProductToolsWithFakeServer:
         query = "Products[?int(QuantityAvailable) >= `100`]"
         result = keyword_search(keywords="resistor", limit=50, jmespath_query=query)
 
-        assert isinstance(result, list)
+        # Result should be a dict with pagination metadata
+        assert isinstance(result, dict)
+        assert "Products" in result
+        assert "cache_key" in result
+        products = result["Products"]
+        assert isinstance(products, list)
         # All results should have QuantityAvailable >= 100
-        for product in result:
+        for product in products:
             if "QuantityAvailable" in product:
                 qty = product["QuantityAvailable"]
                 # Should be either an int >= 100, or could be the raw value

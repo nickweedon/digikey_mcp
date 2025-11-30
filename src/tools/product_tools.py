@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
 from src.jmespath_extensions import search_with_custom_functions
+from src.cache_manager import search_cache
 
 
 # Product Search Response Models - Dataclasses based on DigiKey API JSON schema
@@ -233,6 +234,8 @@ def register_product_tools(mcp):
     def keyword_search(
         keywords: str,
         limit: int = 5,
+        offset: int = 0,
+        cache_key: str = None,
         manufacturer_id: str = None,
         category_id: str = None,
         search_options: str = None,
@@ -240,20 +243,38 @@ def register_product_tools(mcp):
         sort_order: str = "Ascending",
         jmespath_query: Optional[str] = None
     ) -> Union[KeywordSearchResponse, Dict[str, Any]]:
-        """Search DigiKey products by keyword.
+        """Search DigiKey products by keyword with client-controlled pagination.
 
-        Retrieves product information based on keyword search with optional filtering.
-        Supports pagination, manufacturer/category filtering, and custom result shaping
-        via JMESPath queries.
+        Retrieves product information based on keyword search with optional filtering,
+        supporting both automatic API pagination and client-controlled result pagination.
 
-        Optional JMESPath filtering can be applied to pre-shape the response. When
-        `jmespath_query` is provided, the function returns a filtered JSON (dict)
-        according to the JMESPath expression. If not provided, a sensible default
-        query is used that selects commonly needed fields.
+        **Pagination Modes:**
+
+        1. **Fresh Search** (cache_key=None): Fetches all results from DigiKey API
+           (up to 5000 products, paginated in batches of 50), caches them, and returns
+           the first page. A cache_key is returned for subsequent pagination.
+
+        2. **Cached Pagination** (cache_key provided): Uses previously cached results,
+           applies filtering, and returns the requested page. Avoids API calls.
+
+        **Processing Order:**
+        1. Fetch or retrieve cached data
+        2. Apply JMESPath query (if provided)
+        3. Apply pagination (offset + limit)
+        4. Return results with cache_key and pagination metadata
+
+        This design ensures:
+        - JMESPath filtering operates on the complete dataset
+        - Multiple pagination sessions can run concurrently
+        - Efficient pagination without repeated API calls
+        - Cache entries expire after 5 minutes of inactivity
 
         Args:
             keywords: Search terms or part numbers
-            limit: Maximum number of results (default: 5)
+            limit: Maximum number of results per page (default: 5, max: 1000)
+            offset: Starting index in filtered results (default: 0)
+            cache_key: Reuse cached data from previous call. Omit for fresh fetch.
+                      Format: dk_<8-char-hex> (e.g., dk_a7f3b2c1)
             manufacturer_id: Filter by specific manufacturer ID
             category_id: Filter by specific category ID
             search_options: Comma-delimited filters like LeadFree,RoHSCompliant,InStock
@@ -267,9 +288,14 @@ def register_product_tools(mcp):
                            used fields.
 
         Returns:
-            Dict with product data filtered by JMESPath query. Response schema:
+            Dict with product data, pagination info, and cache key. Response schema:
             {
-              "ProductsCount": int,
+              "cache_key": str,  # Use for subsequent pagination calls
+              "total": int,  # Total items after filtering
+              "offset": int,  # Current offset
+              "limit": int,  # Items per page
+              "has_more": bool,  # True if more results available
+              "ProductsCount": int,  # Same as total
               "Products": [{
                 "ManufacturerProductNumber": str,
                 "UnitPrice": float,
@@ -337,44 +363,127 @@ def register_product_tools(mcp):
               Products[].{Part: PartNumber, Value: nvl(int(regex_replace(' ohm$', '', Resistance)), 0)}
 
         Example:
-            # Default filtered fields
-            result = keyword_search("arduino", limit=5)
+            # Fresh search - returns first page and cache_key
+            result = keyword_search("arduino", limit=20)
+            # result["cache_key"] = "dk_a7f3b2c1"
+            # result["total"] = 1523
+            # result["has_more"] = True
 
-            # Custom JMESPath to extract specific fields
-            q = '{Count: ProductsCount, Parts: Products[].{PN: ManufacturerProductNumber, Price: UnitPrice, Stock: QuantityAvailable}}'
-            result = keyword_search("arduino", limit=5, jmespath_query=q)
+            # Get next page using cache_key
+            result2 = keyword_search("arduino", limit=20, offset=20, cache_key="dk_a7f3b2c1")
+            # Uses cached data, no API call
 
-            # Filter resistors by resistance value range (50-200 ohms)
-            q = '''Products[?int(regex_replace(' [oO]hm.*$', '', ResistanceParam)) >= 50
-                            && int(regex_replace(' [oO]hm.*$', '', ResistanceParam)) <= 200]'''
-            result = keyword_search("resistor", jmespath_query=q)
+            # Custom JMESPath with pagination
+            q = '{Count: ProductsCount, Parts: Products[].{PN: ManufacturerProductNumber}}'
+            result = keyword_search("arduino", limit=10, jmespath_query=q)
 
-            # Get only in-stock products with pricing
-            q = '{Products: Products[?QuantityAvailable > `0`].{PN: ManufacturerProductNumber, Price: UnitPrice}}'
-            result = keyword_search("capacitor", limit=10, jmespath_query=q)
+            # Filter and paginate - filter applied to full dataset, then paginated
+            q = 'Products[?QuantityAvailable > `100`]'
+            page1 = keyword_search("resistor", limit=50, jmespath_query=q)
+            # Returns 50 items with stock > 100, plus cache_key
+            page2 = keyword_search("resistor", limit=50, offset=50,
+                                  cache_key=page1["cache_key"], jmespath_query=q)
+            # Returns next 50 items from the same filtered set
         """
-        url = f"{API_BASE}/products/v4/search/keyword"
-        headers = _get_headers()
-
-        body = {
-            "Keywords": keywords,
-            "Limit": limit
-        }
-
-        if manufacturer_id:
-            body["ManufacturerId"] = manufacturer_id
-        if category_id:
-            body["CategoryId"] = category_id
-        if search_options:
-            body["SearchOptionList"] = search_options.split(",")
-
-        if sort_field:
-            body["SortOptions"] = {
-                "Field": sort_field,
-                "SortOrder": sort_order
+        # Validate parameters
+        if limit < 1 or limit > 1000:
+            return {
+                "error": "limit must be between 1 and 1000",
+                "cache_key": "",
+                "total": 0,
+                "offset": 0,
+                "limit": limit,
+                "has_more": False,
+                "ProductsCount": 0,
+                "Products": []
             }
 
-        response = _make_request("POST", url, headers, body, use_user_token=False)
+        if offset < 0:
+            return {
+                "error": "offset must be non-negative",
+                "cache_key": "",
+                "total": 0,
+                "offset": 0,
+                "limit": limit,
+                "has_more": False,
+                "ProductsCount": 0,
+                "Products": []
+            }
+
+        # Get or fetch data
+        all_products = []
+        key = ""
+
+        if cache_key:
+            # Try to use cached data
+            entry = search_cache.get(cache_key)
+            if entry:
+                all_products = entry.data
+                key = cache_key
+            else:
+                # Cache miss - will fetch fresh below
+                cache_key = None
+
+        if not cache_key:
+            # Fetch fresh data from DigiKey API
+            url = f"{API_BASE}/products/v4/search/keyword"
+            headers = _get_headers()
+
+            # Build base request body
+            body = {
+                "Keywords": keywords,
+                "Limit": 50  # Request maximum per page
+            }
+
+            if manufacturer_id:
+                body["ManufacturerId"] = manufacturer_id
+            if category_id:
+                body["CategoryId"] = category_id
+            if search_options:
+                body["SearchOptionList"] = search_options.split(",")
+
+            if sort_field:
+                body["SortOptions"] = {
+                    "Field": sort_field,
+                    "SortOrder": sort_order
+                }
+
+            # Page through all results
+            api_offset = 0
+            max_pages = 100  # Safety limit (5000 products max)
+
+            while len(all_products) < 5000 and api_offset < max_pages * 50:
+                # Set offset for pagination
+                body["Offset"] = api_offset
+
+                # Make API request
+                page_response = _make_request("POST", url, headers, body, use_user_token=False)
+
+                # Extract products from this page
+                page_products = page_response.get("Products", [])
+
+                # If no products returned, we've reached the end
+                if not page_products:
+                    break
+
+                # Add products to our collection
+                all_products.extend(page_products)
+
+                # If we got fewer than 50 products, we've reached the end
+                if len(page_products) < 50:
+                    break
+
+                # Move to next page
+                api_offset += 50
+
+            # Store in cache
+            key = search_cache.create(all_products)
+
+        # Build a response structure with all products (for JMESPath processing)
+        response = {
+            "Products": all_products,
+            "ProductsCount": len(all_products)
+        }
 
         # Default JMESPath query that extracts commonly used fields
         default_query = (
@@ -399,7 +508,56 @@ def register_product_tools(mcp):
         try:
             filtered = search_with_custom_functions(query_to_use, response)
             if filtered is not None:
-                return filtered
+                # If using default query, filtered will have Products array
+                if isinstance(filtered, dict) and "Products" in filtered:
+                    # Get products list for pagination
+                    products_list = filtered.get("Products", [])
+                    total = len(products_list)
+
+                    # Apply pagination to filtered results
+                    paginated_products = products_list[offset:offset + limit]
+
+                    # Build paginated response
+                    filtered["cache_key"] = key
+                    filtered["total"] = total
+                    filtered["offset"] = offset
+                    filtered["limit"] = limit
+                    filtered["has_more"] = offset + limit < total
+                    filtered["Products"] = paginated_products
+                    filtered["ProductsCount"] = len(paginated_products)
+
+                    return filtered
+                else:
+                    # Custom query returned non-standard structure
+                    # Wrap it with pagination metadata
+                    if isinstance(filtered, list):
+                        # Query returned a list directly
+                        total = len(filtered)
+                        paginated = filtered[offset:offset + limit]
+                        return {
+                            "cache_key": key,
+                            "total": total,
+                            "offset": offset,
+                            "limit": limit,
+                            "has_more": offset + limit < total,
+                            "ProductsCount": len(paginated),
+                            "Products": paginated
+                        }
+                    else:
+                        # Query returned an object or scalar - preserve it
+                        result = {
+                            "cache_key": key,
+                            "total": 1,
+                            "offset": 0,
+                            "limit": limit,
+                            "has_more": False
+                        }
+                        # Merge the custom result into the response
+                        if isinstance(filtered, dict):
+                            result.update(filtered)
+                        else:
+                            result["data"] = filtered
+                        return result
         except Exception:
             # Fall back to schema build with error metadata
             pass
@@ -407,10 +565,14 @@ def register_product_tools(mcp):
         # Build dataclass response according to schema, preserving extra fields
         try:
             raw_products = response.get("Products", [])
-            products_count = response.get("ProductsCount", 0)
+            total = len(raw_products)
+
+            # Apply pagination
+            paginated_products = raw_products[offset:offset + limit]
+            products_count = len(paginated_products)
 
             products_dc: List[Product] = []
-            for p in raw_products:
+            for p in paginated_products:
                 # Build Description
                 desc_raw = p.get("Description", {})
                 description = Description(
@@ -549,15 +711,17 @@ def register_product_tools(mcp):
                     )
                 )
 
-            result_dc = KeywordSearchResponse(
-                Products=products_dc,
-                ProductsCount=products_count,
-                ExactMatches=None,  # TODO: Parse if needed
-                FilterOptions=response.get("FilterOptions"),
-                SearchLocaleUsed=response.get("SearchLocaleUsed"),
-                AppliedParametricFiltersDto=response.get("AppliedParametricFiltersDto")
-            )
-            return result_dc
+            # Return dict with pagination metadata
+            # (dataclass doesn't support the new pagination fields)
+            return {
+                "cache_key": key,
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+                "has_more": offset + limit < total,
+                "ProductsCount": products_count,
+                "Products": [vars(p) for p in products_dc]  # Convert dataclasses to dicts
+            }
 
         except Exception as e:
             return {
@@ -565,9 +729,15 @@ def register_product_tools(mcp):
                     "type": "KeywordSearchSchemaBuildError",
                     "code": "SCHEMA_BUILD_FAILED",
                     "message": str(e),
-                    "keywords": keywords,
-                    "originalResponse": response
-                }
+                    "keywords": keywords
+                },
+                "cache_key": key,
+                "total": 0,
+                "offset": offset,
+                "limit": limit,
+                "has_more": False,
+                "ProductsCount": 0,
+                "Products": []
             }
 
     @mcp.tool()

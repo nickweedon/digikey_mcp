@@ -28,7 +28,10 @@ def keyword_search():
     data = request.get_json() or {}
 
     keywords = data.get("Keywords", "")
-    limit = data.get("Limit", 5)
+    # If Limit is not provided, return all results (None means no limit)
+    # DigiKey API max is 50, but for fake server we allow unlimited for testing
+    limit = data.get("Limit", None)
+    offset = data.get("Offset", 0)
 
     if not keywords:
         return jsonify({
@@ -36,7 +39,7 @@ def keyword_search():
             "error_description": "Keywords parameter is required"
         }), 400
 
-    response = get_keyword_search_response(keywords, limit)
+    response = get_keyword_search_response(keywords, limit, offset)
     return jsonify(response)
 
 
