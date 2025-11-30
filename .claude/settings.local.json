@@ -7,7 +7,18 @@
       "Bash(openssl req:*)",
       "Bash(tree:*)",
       "Bash(python:*)",
-      "WebFetch(domain:developer.digikey.com)"
+      "Bash(python3:*)",
+      "WebFetch(domain:developer.digikey.com)",
+      "Bash(docker-compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker inspect:*)",
+      "Bash(ss:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []
