@@ -21,3 +21,4 @@ services:
       - .:/workspace
       - ./localhost-cert.pem:/workspace/localhost-cert.pem:ro
       - ./localhost-key.pem:/workspace/localhost-key.pem:ro
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -233,4 +233,4 @@ Run the MCP server in a Docker container. This requires mounting the environment
 
 # Developing
 
-This project is designed to work with vscode and the devcontainers plugin. I recommend also running claude --dangerously-skip-permissions once inside the devcontainer for best results =)
+This project is designed to work with vscode and the devcontainers plugin. I recommend also running claude --dangerously-skip-permissions once inside the devcontainer for best results 😁
