@@ -279,6 +279,39 @@ def get_part(list_id: str, part_id: str):
     }), 404
 
 
+@mylists_bp.route("/lists/<list_id>/parts/<part_id>", methods=["PUT"])
+def update_part(list_id: str, part_id: str):
+    """Update a part in a list."""
+    is_valid, error = _check_auth(request)
+    if not is_valid:
+        return error
+
+    data = request.get_json() or {}
+
+    # Check sample parts
+    for part in SAMPLE_PARTS:
+        if part["UniqueId"] == part_id:
+            # Return updated part (merge with sample data)
+            updated = part.copy()
+            for key, value in data.items():
+                updated[key] = value
+            return jsonify(updated)
+
+    # Check created parts
+    if list_id in _created_parts:
+        for i, part in enumerate(_created_parts[list_id]):
+            if part["UniqueId"] == part_id:
+                # Update the part
+                for key, value in data.items():
+                    _created_parts[list_id][i][key] = value
+                return jsonify(_created_parts[list_id][i])
+
+    return jsonify({
+        "error": "not_found",
+        "error_description": f"Part '{part_id}' not found in list '{list_id}'"
+    }), 404
+
+
 @mylists_bp.route("/lists/<list_id>/parts/<part_id>", methods=["DELETE"])
 def delete_part(list_id: str, part_id: str):
     """Delete a part from a list."""

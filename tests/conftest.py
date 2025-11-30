@@ -40,9 +40,10 @@ def patched_api_base(fake_server):
         str: The fake server base URL
     """
     with patch("src.config.API_BASE", fake_server.base_url):
-        # Also patch in the tools module where it's imported
+        # Also patch in the tools modules where it's imported
         with patch("src.tools.mylists_tools.API_BASE", fake_server.base_url):
-            yield fake_server.base_url
+            with patch("src.tools.product_tools.API_BASE", fake_server.base_url):
+                yield fake_server.base_url
 
 
 @pytest.fixture
@@ -121,3 +122,27 @@ def reset_fake_server(fake_server):
     fake_server.reset()
     yield
     fake_server.reset()
+
+
+@pytest.fixture
+def client_authenticated_state():
+    """Set up authenticated OAuth state with a client credentials token.
+
+    This fixture injects a valid client token into the global oauth_state,
+    simulating a client credentials authentication for product search APIs.
+
+    Yields:
+        The oauth_state instance with client token set
+    """
+    from src.oauth.state import oauth_state
+
+    # Save original state
+    original_client_token = oauth_state.client_token
+
+    # Set valid client token
+    oauth_state.client_token = "client_credentials_token"
+
+    yield oauth_state
+
+    # Restore original state
+    oauth_state.client_token = original_client_token

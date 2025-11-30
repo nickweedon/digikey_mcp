@@ -126,6 +126,106 @@ class KeywordSearchResponse:
     AppliedParametricFiltersDto: Optional[List[Dict[str, Any]]] = None
 
 
+@dataclass
+class ManufacturersResponse:
+    """Response from manufacturers search."""
+    Manufacturers: List[Manufacturer]
+    ManufacturersCount: int
+
+
+@dataclass
+class CategoriesResponse:
+    """Response from categories search."""
+    Categories: List[CategoryNode]
+    CategoriesCount: int
+
+
+@dataclass
+class MediaLink:
+    """Media link for a product."""
+    MediaType: str
+    Title: str
+    Url: str
+    SmallPhoto: Optional[str] = None
+    Thumbnail: Optional[str] = None
+
+
+@dataclass
+class MediaResponse:
+    """Response from product media request."""
+    MediaLinks: List[MediaLink]
+    DigiKeyPartNumber: Optional[str] = None
+
+
+@dataclass
+class ProductPricingResponse:
+    """Response from product pricing request."""
+    DigiKeyPartNumber: str
+    ManufacturerPartNumber: str
+    QuantityAvailable: int
+    StandardPricing: List[PricingTier]
+    RequestedQuantity: int
+    CalculatedPrice: float
+    ExtendedPrice: float
+    ProductUrl: Optional[str] = None
+    MinimumOrderQuantity: Optional[int] = None
+    StandardPackage: Optional[int] = None
+    MyPricing: Optional[List[PricingTier]] = None
+
+
+@dataclass
+class DigiReelPricingResponse:
+    """Response from DigiReel pricing request."""
+    DigiKeyPartNumber: str
+    ManufacturerPartNumber: str
+    RequestedQuantity: int
+    DigiReelFee: float
+    UnitPrice: float
+    ExtendedPrice: float
+    TotalPrice: float
+    QuantityAvailable: int
+    MinimumOrderQuantity: Optional[int] = None
+
+
+@dataclass
+class SubstitutionsResponse:
+    """Response from product substitutions search."""
+    Products: List[Product]
+    ProductsCount: int
+    RequestedProductNumber: Optional[str] = None
+
+
+@dataclass
+class ProductDetailsResponse:
+    """Response from product details request."""
+    DigiKeyPartNumber: str
+    ManufacturerPartNumber: str
+    Manufacturer: Manufacturer
+    Description: Description
+    ProductUrl: str
+    UnitPrice: float
+    QuantityAvailable: int
+    ProductStatus: ProductStatus
+    StandardPricing: List[PricingTier]
+    BackOrderNotAllowed: bool
+    NormallyStocking: bool
+    Discontinued: bool
+    EndOfLife: bool
+    Ncnr: bool
+    DatasheetUrl: Optional[str] = None
+    PhotoUrl: Optional[str] = None
+    MinimumOrderQuantity: Optional[int] = None
+    StandardPackage: Optional[int] = None
+    Category: Optional[CategoryNode] = None
+    Parameters: Optional[List[ParameterValue]] = None
+    ReachStatus: Optional[str] = None
+    RohsStatus: Optional[str] = None
+    LeadStatus: Optional[str] = None
+    HtsusCode: Optional[str] = None
+    TariffDescription: Optional[str] = None
+    Eccn: Optional[str] = None
+
+
 def register_product_tools(mcp):
     """Register Product Search API MCP tools."""
 
@@ -401,13 +501,21 @@ def register_product_tools(mcp):
             }
 
     @mcp.tool()
-    def product_details(product_number: str, manufacturer_id: str = None, customer_id: str = "0"):
+    def product_details(
+        product_number: str,
+        manufacturer_id: str = None,
+        customer_id: str = "0"
+    ) -> Union[ProductDetailsResponse, Dict[str, Any]]:
         """Get detailed information for a specific product.
 
         Args:
             product_number: DigiKey or manufacturer part number
             manufacturer_id: Optional manufacturer ID for disambiguation
             customer_id: Customer ID for pricing (default: "0")
+
+        Returns:
+            ProductDetailsResponse with complete product details including pricing,
+            availability, specifications, and compliance information.
         """
         url = f"{API_BASE}/products/v4/search/{product_number}/productdetails"
         headers = _get_headers(customer_id)
@@ -422,32 +530,51 @@ def register_product_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def search_manufacturers():
-        """Search and retrieve all product manufacturers."""
+    def search_manufacturers() -> Union[ManufacturersResponse, Dict[str, Any]]:
+        """Search and retrieve all product manufacturers.
+
+        Returns:
+            ManufacturersResponse containing list of all manufacturers with their
+            IDs and names, plus total count.
+        """
         url = f"{API_BASE}/products/v4/search/manufacturers"
         headers = _get_headers()
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def search_categories():
-        """Search and retrieve all product categories."""
+    def search_categories() -> Union[CategoriesResponse, Dict[str, Any]]:
+        """Search and retrieve all product categories.
+
+        Returns:
+            CategoriesResponse containing hierarchical category tree with IDs,
+            names, product counts, and child categories.
+        """
         url = f"{API_BASE}/products/v4/search/categories"
         headers = _get_headers()
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def get_category_by_id(category_id: str):
+    def get_category_by_id(category_id: str) -> Union[CategoryNode, Dict[str, Any]]:
         """Get specific category details by ID.
 
         Args:
             category_id: The category ID to retrieve
+
+        Returns:
+            CategoryNode with category details including ID, name, parent,
+            product counts, and child categories.
         """
         url = f"{API_BASE}/products/v4/search/categories/{category_id}"
         headers = _get_headers()
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def search_product_substitutions(product_number: str, limit: int = 10, search_options: str = None, exclude_marketplace: bool = False):
+    def search_product_substitutions(
+        product_number: str,
+        limit: int = 10,
+        search_options: str = None,
+        exclude_marketplace: bool = False
+    ) -> Union[SubstitutionsResponse, Dict[str, Any]]:
         """Search for product substitutions for a given product.
 
         Args:
@@ -455,6 +582,10 @@ def register_product_tools(mcp):
             limit: Number of substitutions (default: 10)
             search_options: Filters like LeadFree,RoHSCompliant,InStock
             exclude_marketplace: Exclude marketplace products (default: False)
+
+        Returns:
+            SubstitutionsResponse with list of substitute products that can
+            replace the specified product.
         """
         url = f"{API_BASE}/products/v4/search/{product_number}/substitutions"
         headers = _get_headers()
@@ -467,24 +598,36 @@ def register_product_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def get_product_media(product_number: str):
+    def get_product_media(product_number: str) -> Union[MediaResponse, Dict[str, Any]]:
         """Get media (images, documents, videos) for a product.
 
         Args:
             product_number: The product to get media for
+
+        Returns:
+            MediaResponse containing list of media links including product photos,
+            datasheets, and other documentation.
         """
         url = f"{API_BASE}/products/v4/search/{product_number}/media"
         headers = _get_headers()
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def get_product_pricing(product_number: str, customer_id: str = "0", requested_quantity: int = 1):
+    def get_product_pricing(
+        product_number: str,
+        customer_id: str = "0",
+        requested_quantity: int = 1
+    ) -> Union[ProductPricingResponse, Dict[str, Any]]:
         """Get detailed pricing information for a product.
 
         Args:
             product_number: The product to get pricing for
             customer_id: Customer ID for pricing (default: "0")
             requested_quantity: Quantity for pricing calculation (default: 1)
+
+        Returns:
+            ProductPricingResponse with standard pricing tiers, calculated price
+            for requested quantity, and availability information.
         """
         url = f"{API_BASE}/products/v4/search/{product_number}/productpricing"
         headers = _get_headers(customer_id)
@@ -495,13 +638,21 @@ def register_product_tools(mcp):
         return _make_request("GET", url, headers, use_user_token=False)
 
     @mcp.tool()
-    def get_digi_reel_pricing(product_number: str, requested_quantity: int, customer_id: str = "0"):
+    def get_digi_reel_pricing(
+        product_number: str,
+        requested_quantity: int,
+        customer_id: str = "0"
+    ) -> Union[DigiReelPricingResponse, Dict[str, Any]]:
         """Get DigiReel pricing for a product.
 
         Args:
             product_number: DigiKey product number (must be DigiReel compatible)
             requested_quantity: Quantity for DigiReel pricing
             customer_id: Customer ID for pricing (default: "0")
+
+        Returns:
+            DigiReelPricingResponse with DigiReel-specific pricing including
+            the DigiReel service fee and total price calculation.
         """
         url = f"{API_BASE}/products/v4/search/{product_number}/digireelpricing"
         headers = _get_headers(customer_id)

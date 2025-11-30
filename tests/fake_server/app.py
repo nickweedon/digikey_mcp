@@ -12,7 +12,8 @@ from typing import Generator
 from flask import Flask
 
 from .oauth_endpoints import oauth_bp
-from .mylists_endpoints import mylists_bp, reset_state
+from .mylists_endpoints import mylists_bp, reset_state as reset_mylists_state
+from .product_endpoints import products_bp
 
 
 def create_app() -> Flask:
@@ -25,8 +26,14 @@ def create_app() -> Flask:
     # Register blueprints
     app.register_blueprint(oauth_bp)
     app.register_blueprint(mylists_bp)
+    app.register_blueprint(products_bp)
 
     return app
+
+
+def reset_state():
+    """Reset all fake server state."""
+    reset_mylists_state()
 
 
 def find_free_port() -> int:
