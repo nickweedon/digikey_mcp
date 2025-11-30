@@ -1,49 +1,61 @@
-"""Auth Code File Storage"""
+"""OAuth Token File Storage
+
+Handles persistence of OAuth tokens (user_token, refresh_token) to disk
+for session continuity across server restarts.
+"""
 import json
 import time
 import logging
-from src.config import AUTH_CODE_FILE
+from src.config import TOKEN_FILE
 
 logger = logging.getLogger(__name__)
 
 
-def save_auth_code(code: str, state: str):
-    """Save authorization code to file."""
+def save_tokens(user_token: str, refresh_token: str):
+    """Save OAuth tokens to file for persistence across restarts."""
     try:
         data = {
-            "auth_code": code,
-            "state": state,
+            "user_token": user_token,
+            "refresh_token": refresh_token,
             "timestamp": time.time()
         }
-        with open(AUTH_CODE_FILE, 'w') as f:
+        with open(TOKEN_FILE, 'w') as f:
             json.dump(data, f, indent=2)
-        logger.info(f"✓ Authorization code saved to {AUTH_CODE_FILE}")
+        logger.info(f"✓ OAuth tokens saved to {TOKEN_FILE}")
     except Exception as e:
-        logger.error(f"Failed to save auth code: {e}")
+        logger.error(f"Failed to save tokens: {e}")
 
 
-def load_auth_code():
-    """Load authorization code from file."""
+def load_tokens():
+    """Load OAuth tokens from file.
+
+    Returns:
+        dict with 'user_token' and 'refresh_token' keys, or None if not found.
+    """
     try:
-        if not AUTH_CODE_FILE.exists():
-            logger.debug(f"Auth code file not found: {AUTH_CODE_FILE}")
+        if not TOKEN_FILE.exists():
+            logger.debug(f"Token file not found: {TOKEN_FILE}")
             return None
 
-        with open(AUTH_CODE_FILE, 'r') as f:
+        with open(TOKEN_FILE, 'r') as f:
             data = json.load(f)
 
-        logger.info(f"✓ Authorization code loaded from {AUTH_CODE_FILE}")
-        return data
+        if "user_token" in data and "refresh_token" in data:
+            logger.info(f"✓ OAuth tokens loaded from {TOKEN_FILE}")
+            return data
+
+        logger.debug("Token file exists but missing required fields")
+        return None
     except Exception as e:
-        logger.error(f"Failed to load auth code: {e}")
+        logger.error(f"Failed to load tokens: {e}")
         return None
 
 
-def delete_auth_code_file():
-    """Delete the authorization code file."""
+def delete_token_file():
+    """Delete the token file."""
     try:
-        if AUTH_CODE_FILE.exists():
-            AUTH_CODE_FILE.unlink()
-            logger.info(f"✓ Deleted auth code file: {AUTH_CODE_FILE}")
+        if TOKEN_FILE.exists():
+            TOKEN_FILE.unlink()
+            logger.info(f"✓ Deleted token file: {TOKEN_FILE}")
     except Exception as e:
-        logger.error(f"Failed to delete auth code file: {e}")
+        logger.error(f"Failed to delete token file: {e}")

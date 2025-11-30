@@ -6,7 +6,6 @@ import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from src.config import OAUTH_PORT, SSL_CERT_FILE, SSL_KEY_FILE
 from src.oauth.state import oauth_state
-from src.oauth.storage import save_auth_code
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,6 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 
                 if state == oauth_state.auth_state:
                     oauth_state.auth_code = code
-                    save_auth_code(code, state)
 
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')

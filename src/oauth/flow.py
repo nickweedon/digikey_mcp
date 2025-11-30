@@ -6,10 +6,11 @@ import requests
 import webbrowser
 from src.config import (
     CLIENT_ID, CLIENT_SECRET, TOKEN_URL, AUTHORIZE_URL,
-    REDIRECT_URI, AUTH_CODE_FILE
+    REDIRECT_URI
 )
 from src.oauth.state import oauth_state
 from src.oauth.server import start_oauth_server
+from src.oauth.storage import save_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,10 @@ def exchange_code_for_token(code: str):
     oauth_state.user_token = token_data["access_token"]
     oauth_state.refresh_token = token_data.get("refresh_token")
 
+    # Save tokens to file for persistence across restarts
+    if oauth_state.refresh_token:
+        save_tokens(oauth_state.user_token, oauth_state.refresh_token)
+
     logger.info("✓ Successfully obtained user access token")
     return token_data
 
@@ -108,6 +113,10 @@ def refresh_user_token():
     token_data = resp.json()
     oauth_state.user_token = token_data["access_token"]
     oauth_state.refresh_token = token_data.get("refresh_token", oauth_state.refresh_token)
+
+    # Save updated tokens to file
+    if oauth_state.refresh_token:
+        save_tokens(oauth_state.user_token, oauth_state.refresh_token)
 
     logger.info("✓ Successfully refreshed user access token")
     return token_data

@@ -6,7 +6,7 @@ The DigiKey MCP Server now **automatically handles authentication** for you!
 
 ### Key Features:
 - ✅ **Auto-launch browser** when MyLists API needs authentication
-- ✅ **Save auth code to file** - survives server restarts  
+- ✅ **Save tokens to file** - survives server restarts
 - ✅ **No manual steps** - just call MyLists methods directly!
 
 ## Quick Start
@@ -17,7 +17,7 @@ The DigiKey MCP Server now **automatically handles authentication** for you!
 lists = get_all_lists()
 # 1. Browser opens to DigiKey login
 # 2. You authorize the app
-# 3. Auth code saved to .digikey_auth_code
+# 3. Tokens saved to .digikey_tokens
 # 4. Done!
 ```
 
@@ -25,18 +25,18 @@ lists = get_all_lists()
 ```python
 # Same call - no browser needed!
 lists = get_all_lists()
-# Uses saved auth code from file
+# Uses saved tokens from file
 ```
 
 ## How It Works
 
-**File Storage**: Auth code is saved to `.digikey_auth_code`
+**File Storage**: OAuth tokens are saved to `.digikey_tokens`
 
 **Auto-Launch**: When you call a MyLists method:
-1. Checks for saved auth code file
+1. Checks for saved token file
 2. If not found → opens browser automatically
-3. After you authorize → saves to file
-4. Future calls use the saved auth code
+3. After you authorize → exchanges code for tokens and saves to file
+4. Future calls use the saved tokens
 
 ## Manual Control (Optional)
 
@@ -51,7 +51,7 @@ oauth_complete_login()
 # Refresh token
 oauth_refresh()
 
-# Logout (deletes auth code file)
+# Logout (deletes token file)
 oauth_logout()
 ```
 
@@ -64,7 +64,7 @@ CLIENT_SECRET=your_client_secret
 USE_SANDBOX=false
 REDIRECT_URI=https://localhost:8139/callback
 OAUTH_PORT=8139
-AUTH_CODE_FILE=.digikey_auth_code
+TOKEN_FILE=.digikey_tokens
 SSL_CERT_FILE=localhost-cert.pem
 SSL_KEY_FILE=localhost-key.pem
 ```
@@ -94,9 +94,9 @@ For production, use a proper SSL certificate from a trusted Certificate Authorit
 
 ## Security
 
-- Add `.digikey_auth_code` and `*.pem` files to `.gitignore`
-- File permissions: `chmod 600 .digikey_auth_code localhost-key.pem`
-- Logout clears both tokens and auth code file
+- Add `.digikey_tokens` and `*.pem` files to `.gitignore`
+- File permissions: `chmod 600 .digikey_tokens localhost-key.pem`
+- Logout clears both in-memory tokens and the token file
 - SSL certificate files should not be committed to version control
 
 ## Troubleshooting
@@ -109,6 +109,6 @@ For production, use a proper SSL certificate from a trusted Certificate Authorit
 - Complete browser auth within 5 minutes
 - Or increase timeout: `oauth_complete_login(timeout=600)`
 
-**Auth code expires?**
-- Server auto-detects and re-launches browser
-- Old file is automatically deleted
+**Token expires?**
+- Server auto-refreshes using the refresh token
+- If refresh fails, re-authenticate via browser

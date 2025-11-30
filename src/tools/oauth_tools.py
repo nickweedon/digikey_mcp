@@ -5,7 +5,7 @@ from src.config import REDIRECT_URI
 from src.oauth.state import oauth_state
 from src.oauth.server import start_oauth_server
 from src.oauth.flow import generate_authorization_url, exchange_code_for_token, refresh_user_token
-from src.oauth.storage import delete_auth_code_file
+from src.oauth.storage import delete_token_file
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ def register_oauth_tools(mcp):
     def oauth_complete_login():
         """Complete the OAuth login process by exchanging the authorization code for tokens.
 
-        This should be called after the user has reported back that they have visited the authorization URL.
-        In this case the user has a auth_code but does not yet have a user_token.
-        
+        This should be called after the user has visited the authorization URL and completed login.
+        The authorization code received from the callback will be exchanged for access tokens.
+
         Returns:
             dict: Status of the login completion
         """
@@ -133,9 +133,9 @@ def register_oauth_tools(mcp):
         oauth_state.auth_code = None
         oauth_state.auth_state = None
 
-        delete_auth_code_file()
+        delete_token_file()
 
         return {
             "status": "success",
-            "message": "Logged out successfully. All tokens and saved auth code cleared."
+            "message": "Logged out successfully. All tokens cleared."
         }

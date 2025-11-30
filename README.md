@@ -212,7 +212,7 @@ Run the MCP server in a Docker container. This requires mounting the environment
         "-v",
         "C:/docker/digikey-localhost-cert.pem:/workspace/localhost-cert.pem:ro",
         "-v",
-        "C:/docker/digikey-auth-code:/workspace/.digikey_auth_code",
+        "C:/docker/digikey-tokens:/workspace/.digikey_tokens",
         "digikey-mcp:latest",
         "/bin/bash",
         "-c",
@@ -227,6 +227,6 @@ Run the MCP server in a Docker container. This requires mounting the environment
 - `.env` - Environment variables (read-only)
 - `localhost-key.pem` - SSL private key for OAuth callback (read-only)
 - `localhost-cert.pem` - SSL certificate for OAuth callback (read-only)
-- `.digikey_auth_code` - OAuth token storage (read-write, persists between container runs)
+- `.digikey_tokens` - OAuth token storage (read-write, persists between container runs)
 
 **Note:** Adjust the paths (`C:/docker/...`) to match your local file locations. On Linux/macOS, use Unix-style paths (e.g., `/home/user/docker/...`). 

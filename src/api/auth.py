@@ -1,34 +1,37 @@
 """API Authentication Helpers"""
 import logging
 from src.oauth.state import oauth_state
-from src.oauth.storage import load_auth_code, delete_auth_code_file
-from src.oauth.flow import exchange_code_for_token
+from src.oauth.storage import load_tokens, delete_token_file
 
 logger = logging.getLogger(__name__)
 
 
 def initialize_user_token_from_file():
-    """Initialize user token from saved auth code file if it exists."""
+    """Initialize user token from saved token file if it exists.
+
+    Loads saved tokens and attempts to refresh if the access token is expired.
+    """
     if oauth_state.has_user_token():
         logger.debug("User token already available")
         return True
 
-    auth_data = load_auth_code()
-    if not auth_data:
+    token_data = load_tokens()
+    if not token_data:
         return False
 
     try:
-        code = auth_data.get("auth_code")
-        if code:
-            logger.info("Exchanging saved authorization code for tokens...")
-            # This will update the oauth_state with user_token and refresh_token
-            exchange_code_for_token(code)
-            logger.info("✓ User token initialized from saved auth code")
+        # Load tokens into oauth_state
+        oauth_state.user_token = token_data.get("user_token")
+        oauth_state.refresh_token = token_data.get("refresh_token")
+
+        if oauth_state.user_token and oauth_state.refresh_token:
+            logger.info("✓ User tokens loaded from file")
             return True
+
     except Exception as e:
-        logger.warning(f"Failed to exchange saved auth code: {e}")
-        logger.info("Auth code may have expired. Deleting file...")
-        delete_auth_code_file()
+        logger.warning(f"Failed to load saved tokens: {e}")
+        logger.info("Deleting invalid token file...")
+        delete_token_file()
         return False
 
     return False
@@ -40,7 +43,7 @@ def _require_user_auth():
         return
 
     if initialize_user_token_from_file():
-        logger.info("✓ User authenticated from saved auth code")
+        logger.info("✓ User authenticated from saved tokens")
         return
 
     logger.info("No saved authentication. Authenticate at http://localhost:8139")

@@ -10,12 +10,13 @@ import urllib.parse
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import requests
 
 # Configuration
 CLIENT_ID = os.getenv("CLIENT_ID", "NLRtXHUCuG5hmSuyOHD3r76KDG3uIB2LKGb2NGIRHK9dmqwp")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET", "ZlWm7P8CDJT9sOtkjJlvMG2W7Tgp5tFzUYyxrP5A4fL02nNxpeb0nGLA0b7xcasn")
 REDIRECT_URI = "http://localhost:8139/callback"
-AUTH_CODE_FILE = Path(".digikey_auth_code")
+TOKEN_FILE = Path(".digikey_tokens")
 
 # API endpoints
 TOKEN_URL = "https://api.digikey.com/v1/oauth2/token"
@@ -42,14 +43,6 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
                 if state == auth_state:
                     auth_code = code
 
-                    # Save to file
-                    with open(AUTH_CODE_FILE, 'w') as f:
-                        json.dump({
-                            "auth_code": code,
-                            "state": state,
-                            "timestamp": time.time()
-                        }, f, indent=2)
-
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
                     self.end_headers()
@@ -63,7 +56,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
                     </html>
                     """
                     self.wfile.write(html.encode('utf-8'))
-                    print("✓ Authorization code received and saved!")
+                    print("✓ Authorization code received!")
                 else:
                     self.send_response(400)
                     self.end_headers()
@@ -87,6 +80,37 @@ def start_callback_server():
     thread.start()
     return server
 
+def exchange_code_for_tokens(code):
+    """Exchange authorization code for tokens."""
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    print("Exchanging authorization code for tokens...")
+    resp = requests.post(TOKEN_URL, data=data, headers=headers)
+
+    if resp.status_code != 200:
+        print(f"✗ Token exchange error: {resp.status_code} - {resp.text}")
+        return None
+
+    token_data = resp.json()
+    return token_data
+
+def save_tokens(user_token, refresh_token):
+    """Save tokens to file."""
+    with open(TOKEN_FILE, 'w') as f:
+        json.dump({
+            "user_token": user_token,
+            "refresh_token": refresh_token,
+            "timestamp": time.time()
+        }, f, indent=2)
+    print(f"✓ Tokens saved to {TOKEN_FILE}")
+
 def test_oauth_flow():
     """Test the OAuth flow."""
     global auth_state, auth_code
@@ -95,17 +119,18 @@ def test_oauth_flow():
     print("DigiKey OAuth Flow Test")
     print("=" * 60)
 
-    # Check if auth code file exists
-    if AUTH_CODE_FILE.exists():
-        print(f"\n✓ Found existing auth code file: {AUTH_CODE_FILE}")
-        with open(AUTH_CODE_FILE, 'r') as f:
+    # Check if token file exists
+    if TOKEN_FILE.exists():
+        print(f"\n✓ Found existing token file: {TOKEN_FILE}")
+        with open(TOKEN_FILE, 'r') as f:
             data = json.load(f)
-        print(f"  Auth code: {data['auth_code'][:20]}...")
-        print(f"  Saved at: {time.ctime(data['timestamp'])}")
-        print("\n✓ Auto-launch would skip browser (file exists)")
-        return True
+        if "user_token" in data:
+            print(f"  User token: {data['user_token'][:20]}...")
+            print(f"  Saved at: {time.ctime(data['timestamp'])}")
+            print("\n✓ Tokens already saved - would skip browser!")
+            return True
 
-    print(f"\n✗ No auth code file found: {AUTH_CODE_FILE}")
+    print(f"\n✗ No token file found: {TOKEN_FILE}")
     print("✓ Auto-launch would open browser now!\n")
 
     # Start callback server
@@ -145,10 +170,19 @@ def test_oauth_flow():
         time.sleep(0.5)
 
     if auth_code:
-        print(f"\n✓ SUCCESS! Authorization code received")
+        print(f"\n✓ Authorization code received")
         print(f"  Code: {auth_code[:20]}...")
-        print(f"  Saved to: {AUTH_CODE_FILE}")
-        return True
+
+        # Exchange code for tokens
+        token_data = exchange_code_for_tokens(auth_code)
+        if token_data:
+            user_token = token_data.get("access_token")
+            refresh_token = token_data.get("refresh_token")
+            save_tokens(user_token, refresh_token)
+            return True
+        else:
+            print("✗ Failed to exchange code for tokens")
+            return False
     else:
         print(f"\n✗ TIMEOUT: No authorization code received in {timeout}s")
         return False
@@ -161,7 +195,7 @@ if __name__ == "__main__":
             print("\n" + "=" * 60)
             print("✓ OAuth Flow Test PASSED")
             print("=" * 60)
-            print(f"\nAuth code saved to: {AUTH_CODE_FILE}")
+            print(f"\nTokens saved to: {TOKEN_FILE}")
             print("Next time this runs, it will skip the browser!")
         else:
             print("\n" + "=" * 60)

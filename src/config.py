@@ -27,8 +27,8 @@ OAUTH_PORT = int(os.getenv("OAUTH_PORT", "8139"))
 SSL_CERT_FILE = Path(os.getenv("SSL_CERT_FILE", "localhost-cert.pem"))
 SSL_KEY_FILE = Path(os.getenv("SSL_KEY_FILE", "localhost-key.pem"))
 
-# Auth code file storage
-AUTH_CODE_FILE = Path(os.getenv("AUTH_CODE_FILE", ".digikey_auth_code"))
+# Token file storage
+TOKEN_FILE = Path(os.getenv("TOKEN_FILE", ".digikey_tokens"))
 
 # DigiKey OAuth2 endpoints
 if USE_SANDBOX:
