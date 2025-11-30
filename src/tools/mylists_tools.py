@@ -501,15 +501,14 @@ def register_mylists_tools(mcp):
         Args:
             list_id: The unique identifier of the list
             start_index: Starting position for pagination (default: 0)
-            limit: Maximum number of parts to return (max: 200)
+            limit: Maximum number of parts to return (default: 100 if not specified, there is no upper limit)
             assemblies: Units per part, minimum 1 (default: 1)
             include_attrition: If True, includes attrition data in response
             customer_id: DigiKey Customer ID (default: "0")
             jmespath_query: Optional JMESPath expression to filter the response
 
         Returns:
-            Dict with parts data filtered by JMESPath query. Returns error dict if
-            limit > 200. Response schema:
+            Dict with parts data filtered by JMESPath query. Response schema:
             {
               "TotalParts": int,
               "PartsList": [{
@@ -638,19 +637,7 @@ def register_mylists_tools(mcp):
             result = get_parts_by_list_id("abc123", jmespath_query=q)
         """
         _require_user_auth()
-        
-        if limit is not None and limit > 200:
-            return {
-                "error": {
-                    "type": "InvalidLimit",
-                    "code": "LIMIT_TOO_HIGH",
-                    "message": "limit must be <= 200",
-                    "providedLimit": limit,
-                    "allowedMax": 200,
-                    "listId": list_id
-                }
-            }
-        
+
         url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
         headers = _get_headers(customer_id, use_user_token=True)
 
