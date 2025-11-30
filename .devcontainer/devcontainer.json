@@ -11,9 +11,6 @@
   // Working directory inside the container
   "workspaceFolder": "/workspace",
 
-  // Forward ports (add any ports your application needs)
-  "forwardPorts": [8139],
-
   // Install VS Code extensions automatically in the container
   "customizations": {
     "vscode": {
