@@ -412,6 +412,110 @@ class TestProductToolsWithFakeServer:
         assert "DigiReelFee" in result, "Missing DigiReelFee"
         assert "TotalPrice" in result or "ExtendedPrice" in result, "Missing price field"
 
+    @pytest.mark.unit
+    def test_keyword_search_with_regex_replace(
+        self, client_authenticated_state, patched_api_base, fake_server
+    ):
+        """Test keyword_search with regex_replace custom function."""
+        from src.tools.product_tools import register_product_tools
+
+        mcp = FastMCP("test")
+        register_product_tools(mcp)
+
+        tools = mcp._tool_manager._tools
+        keyword_search = tools["keyword_search"].fn
+
+        # Use regex_replace to clean part numbers
+        query = "Products[].{PartNum: regex_replace('[^A-Z0-9]', '', ManufacturerProductNumber)}"
+        result = keyword_search(keywords="resistor", limit=5, jmespath_query=query)
+
+        assert isinstance(result, list)
+        if result:
+            assert "PartNum" in result[0]
+            # Verify that the part number has been cleaned (no special chars)
+            assert all(c.isalnum() for c in result[0]["PartNum"] if c)
+
+    @pytest.mark.unit
+    def test_keyword_search_with_int_conversion(
+        self, client_authenticated_state, patched_api_base, fake_server
+    ):
+        """Test keyword_search with int custom function."""
+        from src.tools.product_tools import register_product_tools
+
+        mcp = FastMCP("test")
+        register_product_tools(mcp)
+
+        tools = mcp._tool_manager._tools
+        keyword_search = tools["keyword_search"].fn
+
+        # Use int to convert quantity to integer
+        query = "Products[].{Part: ManufacturerProductNumber, Qty: int(QuantityAvailable)}"
+        result = keyword_search(keywords="resistor", limit=5, jmespath_query=query)
+
+        assert isinstance(result, list)
+        if result:
+            assert "Part" in result[0]
+            assert "Qty" in result[0]
+            # Verify that Qty is an integer (or null if conversion failed)
+            assert result[0]["Qty"] is None or isinstance(result[0]["Qty"], int)
+
+    @pytest.mark.unit
+    def test_keyword_search_with_combined_functions(
+        self, client_authenticated_state, patched_api_base, fake_server
+    ):
+        """Test keyword_search with combined regex_replace + int functions."""
+        from src.tools.product_tools import register_product_tools
+
+        mcp = FastMCP("test")
+        register_product_tools(mcp)
+
+        tools = mcp._tool_manager._tools
+        keyword_search = tools["keyword_search"].fn
+
+        # Simulate extracting numeric value from a field with units
+        # Since fake server data may not have parametric data with units,
+        # we'll test the chaining capability with a simple numeric string
+        query = """
+        Products[].{
+            Part: ManufacturerProductNumber,
+            QtyNumeric: int(regex_replace('[^0-9]', '', ManufacturerProductNumber))
+        }
+        """
+        result = keyword_search(keywords="resistor", limit=5, jmespath_query=query)
+
+        assert isinstance(result, list)
+        if result:
+            assert "Part" in result[0]
+            assert "QtyNumeric" in result[0]
+            # QtyNumeric should be an integer or null
+            assert result[0]["QtyNumeric"] is None or isinstance(result[0]["QtyNumeric"], int)
+
+    @pytest.mark.unit
+    def test_keyword_search_filter_by_converted_value(
+        self, client_authenticated_state, patched_api_base, fake_server
+    ):
+        """Test filtering products by converted numeric value."""
+        from src.tools.product_tools import register_product_tools
+
+        mcp = FastMCP("test")
+        register_product_tools(mcp)
+
+        tools = mcp._tool_manager._tools
+        keyword_search = tools["keyword_search"].fn
+
+        # Filter products with QuantityAvailable >= 100 using int conversion
+        query = "Products[?int(QuantityAvailable) >= `100`]"
+        result = keyword_search(keywords="resistor", limit=50, jmespath_query=query)
+
+        assert isinstance(result, list)
+        # All results should have QuantityAvailable >= 100
+        for product in result:
+            if "QuantityAvailable" in product:
+                qty = product["QuantityAvailable"]
+                # Should be either an int >= 100, or could be the raw value
+                if isinstance(qty, int):
+                    assert qty >= 100
+
 
 class TestMyListsToolsWithFakeServer:
     """Tests for MyLists API tools using the fake server."""

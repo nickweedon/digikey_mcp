@@ -23,7 +23,8 @@
       "Bash(uv add:*)",
       "Bash(cat:*)",
       "WebSearch",
-      "Bash(uv run pytest:*)"
+      "Bash(uv run pytest:*)",
+      "Bash(uv sync:*)"
     ],
     "deny": [],
     "ask": []

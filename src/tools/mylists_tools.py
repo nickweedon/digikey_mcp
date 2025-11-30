@@ -4,11 +4,11 @@ Provides tools for interacting with the DigiKey MyLists API.
 All tools require user authentication via OAuth 2.0.
 """
 from typing import Optional, List, Dict, Any, Literal, Union
-import jmespath
 from dataclasses import dataclass
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
 from src.api.auth import _require_user_auth
+from src.jmespath_extensions import search_with_custom_functions
 
 
 # Type aliases for clarity
@@ -595,6 +595,20 @@ def register_mylists_tools(mcp):
               }]
             }
 
+        Custom JMESPath Functions:
+            The following custom functions are available for use in jmespath_query:
+
+            - regex_replace(pattern, replacement, string): Performs regex find-and-replace
+              Example: regex_replace(' ohm$', '', '100 ohm') → '100'
+              Example: regex_replace('[^0-9.]', '', '4.7uF') → '4.7'
+
+            - int(value): Converts string to integer, returns null on failure
+              Example: int('100') → 100
+              Example: int('invalid') → null
+
+            Combined usage for filtering by numeric values:
+              PartsList[?int(regex_replace('[^0-9]', '', QuantityField)) >= 100]
+
         Raises:
             ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails
@@ -607,6 +621,10 @@ def register_mylists_tools(mcp):
             # Note: Always use PartsList[] to access the parts array in custom queries
             q = '{TotalParts: TotalParts, PartsList: PartsList[].{Id: PartId, Number: DigiKeyPartNumber, Prices: Quantities[].PackOptions[].{Unit: CalculatedUnitPrice, Ext: ExtendedPrice}}}'
             result = get_parts_by_list_id("abc123", start_index=0, limit=150, jmespath_query=q)
+
+            # Clean and convert requested quantities
+            q = 'PartsList[].{Part: DigiKeyPartNumber, Qty: int(regex_replace("[^0-9]", "", RequestedQuantity))}'
+            result = get_parts_by_list_id("abc123", jmespath_query=q)
         """
         _require_user_auth()
         
@@ -668,7 +686,7 @@ def register_mylists_tools(mcp):
 
         query_to_use = jmespath_query or default_query
         try:
-            filtered = jmespath.search(query_to_use, response)
+            filtered = search_with_custom_functions(query_to_use, response)
             if filtered is not None:
                 return filtered
         except Exception:

@@ -1,9 +1,9 @@
 """Product Search API MCP Tools"""
 from typing import Optional, List, Dict, Any, Union
 from dataclasses import dataclass
-import jmespath
 from src.config import API_BASE
 from src.api.client import _get_headers, _make_request
+from src.jmespath_extensions import search_with_custom_functions
 
 
 # Product Search Response Models - Dataclasses based on DigiKey API JSON schema
@@ -310,6 +310,21 @@ def register_product_tools(mcp):
               }]
             }
 
+        Custom JMESPath Functions:
+            The following custom functions are available for use in jmespath_query:
+
+            - regex_replace(pattern, replacement, string): Performs regex find-and-replace
+              Example: regex_replace(' ohm$', '', '100 ohm') → '100'
+              Example: regex_replace('[^0-9]', '', 'R100K') → '100'
+
+            - int(value): Converts string to integer, returns null on failure
+              Example: int('100') → 100
+              Example: int('invalid') → null
+
+            Combined usage for component value filtering:
+              Products[?int(regex_replace(' ohm$', '', ParameterValue)) >= 50 &&
+                        int(regex_replace(' ohm$', '', ParameterValue)) <= 200]
+
         Example:
             # Default filtered fields
             result = keyword_search("arduino", limit=5)
@@ -317,6 +332,11 @@ def register_product_tools(mcp):
             # Custom JMESPath to extract specific fields
             q = '{Count: ProductsCount, Parts: Products[].{PN: ManufacturerProductNumber, Price: UnitPrice, Stock: QuantityAvailable}}'
             result = keyword_search("arduino", limit=5, jmespath_query=q)
+
+            # Filter resistors by resistance value range (50-200 ohms)
+            q = '''Products[?int(regex_replace(' [oO]hm.*$', '', ResistanceParam)) >= 50
+                            && int(regex_replace(' [oO]hm.*$', '', ResistanceParam)) <= 200]'''
+            result = keyword_search("resistor", jmespath_query=q)
 
             # Get only in-stock products with pricing
             q = '{Products: Products[?QuantityAvailable > `0`].{PN: ManufacturerProductNumber, Price: UnitPrice}}'
@@ -366,7 +386,7 @@ def register_product_tools(mcp):
         # Apply JMESPath query if provided or use default
         query_to_use = jmespath_query or default_query
         try:
-            filtered = jmespath.search(query_to_use, response)
+            filtered = search_with_custom_functions(query_to_use, response)
             if filtered is not None:
                 return filtered
         except Exception:
