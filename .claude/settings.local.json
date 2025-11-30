@@ -21,7 +21,9 @@
       "Bash(git push)",
       "WebFetch(domain:gofastmcp.com)",
       "Bash(uv add:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebSearch",
+      "Bash(uv run pytest:*)"
     ],
     "deny": [],
     "ask": []

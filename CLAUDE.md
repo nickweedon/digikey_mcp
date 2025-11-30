@@ -27,7 +27,19 @@ digikey_mcp/
 │       ├── product_tools.py  # Product search MCP tools
 │       └── mylists_tools.py  # MyLists management MCP tools
 ├── tests/
-│   └── test_*.py             # Test files
+│   ├── __init__.py           # Test package initialization
+│   ├── conftest.py           # Shared pytest fixtures
+│   ├── fake_server/          # Fake DigiKey API server for testing
+│   │   ├── __init__.py
+│   │   ├── app.py            # Flask app with fake endpoints
+│   │   ├── oauth_endpoints.py    # OAuth token/authorize endpoints
+│   │   ├── mylists_endpoints.py  # MyLists API endpoints
+│   │   └── responses/
+│   │       ├── __init__.py
+│   │       └── mylists.py    # Sample MyLists response data
+│   └── unit/
+│       ├── __init__.py
+│       └── test_mylists_tools.py  # Unit tests for mylists_tools
 ├── digikey_mcp_server.py     # Main MCP server entry point
 ├── pyproject.toml            # Project configuration and dependencies
 ├── .env                      # Environment variables (credentials)
@@ -143,12 +155,59 @@ The container exposes port 8139 for OAuth callbacks and mounts:
 
 ## Testing
 
-Test the server with:
+### Running Tests
+
+Install test dependencies and run all tests:
+```bash
+uv sync --extra test
+uv run pytest
+```
+
+Run specific test files or markers:
+```bash
+# Run unit tests only
+uv run pytest -m unit
+
+# Run a specific test file
+uv run pytest tests/unit/test_mylists_tools.py
+
+# Run with coverage report
+uv run pytest --cov=src --cov-report=html
+```
+
+### Test Infrastructure
+
+Tests use a **fake DigiKey API server** (Flask-based) that runs locally during test execution:
+
+- **Session-scoped server**: Started once per test session on a random free port
+- **Authentic API simulation**: Mimics real DigiKey API responses and OAuth flow
+- **Test isolation**: Fixtures reset state between tests
+
+### Pytest Fixtures (conftest.py)
+
+| Fixture | Scope | Purpose |
+|---------|-------|---------|
+| `fake_server` | session | Start/stop Flask server, provides `.base_url` |
+| `patched_api_base` | function | Patches `src.config.API_BASE` to fake server |
+| `authenticated_state` | function | Injects valid tokens into `oauth_state` |
+| `reset_oauth_state` | function | Clears all tokens from `oauth_state` |
+| `reset_fake_server` | function | Resets fake server state between tests |
+
+### Adding New Tests
+
+1. Create test files in `tests/unit/` named `test_*.py`
+2. Use the `@pytest.mark.unit` marker for unit tests
+3. Use fixtures to set up authentication and API patching
+4. Follow the pattern in `test_mylists_tools.py` for new tool tests
+
+### Quick Verification
+
+Test the server loads without errors:
 ```bash
 uv run python -c "from digikey_mcp_server import mcp; print('Server loads OK')"
 ```
 
-Run specific tests:
+Legacy test scripts (may require API credentials):
 ```bash
 uv run python test_keyword_search.py
 uv run python test_mylists.py
