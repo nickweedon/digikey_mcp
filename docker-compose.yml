@@ -1,0 +1,21 @@
+services:
+  digikey-mcp:
+    build:
+      context: .
+      args:
+        INSTALL_MCP: true
+    image: digikey-mcp:latest
+    container_name: digikey-mcp-server
+    stdin_open: true
+    tty: true
+    environment:
+      - CLIENT_ID=${CLIENT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - USE_SANDBOX=${USE_SANDBOX}
+    env_file:
+      - .env
+    ports:
+      - "8139:8139"
+    volumes:
+      - ./localhost-cert.pem:/workspace/localhost-cert.pem:ro
+      - ./localhost-key.pem:/workspace/localhost-key.pem:ro
