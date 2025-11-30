@@ -15,10 +15,10 @@ class TestGetAllLists:
     """Tests for the get_all_lists tool."""
 
     @pytest.mark.unit
-    def test_get_all_lists_returns_list_array(
+    def test_get_all_lists_returns_dict_with_lists(
         self, authenticated_state, patched_api_base, fake_server
     ):
-        """Test that get_all_lists returns an array of lists."""
+        """Test that get_all_lists returns a dict with 'lists' key containing array."""
         # Import after patching to get the patched API_BASE
         from src.tools.mylists_tools import register_mylists_tools
 
@@ -33,9 +33,11 @@ class TestGetAllLists:
         # Call the tool
         result = get_all_lists()
 
-        # Verify result is a list
-        assert isinstance(result, list), f"Expected list, got {type(result)}"
-        assert len(result) > 0, "Expected non-empty list"
+        # Verify result is a dict with 'lists' key (FastMCP requires dict for structured_content)
+        assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+        assert "lists" in result, "Expected 'lists' key in result"
+        assert isinstance(result["lists"], list), f"Expected list, got {type(result['lists'])}"
+        assert len(result["lists"]) > 0, "Expected non-empty list"
 
     @pytest.mark.unit
     def test_get_all_lists_contains_required_fields(
@@ -54,7 +56,7 @@ class TestGetAllLists:
 
         # Check first list has required fields
         required_fields = ["ListId", "ListName", "TotalParts", "DateCreated"]
-        first_list = result[0]
+        first_list = result["lists"][0]
 
         for field in required_fields:
             assert field in first_list, f"Missing required field: {field}"
@@ -75,12 +77,12 @@ class TestGetAllLists:
         result = get_all_lists()
 
         # Verify we got the expected sample lists
-        list_ids = [lst["ListId"] for lst in result]
+        list_ids = [lst["ListId"] for lst in result["lists"]]
         assert "list-001" in list_ids, "Expected list-001 in results"
         assert "list-002" in list_ids, "Expected list-002 in results"
 
         # Verify list names match
-        list_names = {lst["ListId"]: lst["ListName"] for lst in result}
+        list_names = {lst["ListId"]: lst["ListName"] for lst in result["lists"]}
         assert list_names["list-001"] == "Test Components"
         assert list_names["list-002"] == "Project Alpha BOM"
 
@@ -121,8 +123,9 @@ class TestGetAllLists:
         # Should work with custom customer_id
         result = get_all_lists(customer_id="12345")
 
-        # Just verify it returns a list without error
-        assert isinstance(result, list)
+        # Verify it returns a dict with lists key
+        assert isinstance(result, dict)
+        assert "lists" in result
 
 
 class TestCreateList:
@@ -223,3 +226,123 @@ class TestGetListById:
         # Should return an error dict
         assert isinstance(result, dict)
         assert "error" in result
+
+
+class TestRequestedPartConversion:
+    """Tests for RequestedPart and PartQuantity dataclass conversions."""
+
+    @pytest.mark.unit
+    def test_requested_part_simple_conversion(self):
+        """Test RequestedPart converts to correct API format with basic fields."""
+        from src.tools.mylists_tools import RequestedPart
+
+        part = RequestedPart(
+            requested_part_number="296-8875-1-ND",
+            customer_reference="R1"
+        )
+        result = part.to_dict()
+
+        assert result["RequestedPartNumber"] == "296-8875-1-ND"
+        assert result["CustomerReference"] == "R1"
+        # None values should be excluded
+        assert "PartId" not in result
+        assert "ManufacturerName" not in result
+        assert "Notes" not in result
+
+    @pytest.mark.unit
+    def test_requested_part_with_all_fields(self):
+        """Test RequestedPart includes all non-None fields."""
+        from src.tools.mylists_tools import RequestedPart
+
+        part = RequestedPart(
+            part_id="12345",
+            requested_part_number="296-8875-1-ND",
+            manufacturer_name="Texas Instruments",
+            customer_reference="R1",
+            reference_designator="R1",
+            notes="Test note",
+            selected_quantity_index=0,
+            attrition=5
+        )
+        result = part.to_dict()
+
+        assert result["PartId"] == "12345"
+        assert result["RequestedPartNumber"] == "296-8875-1-ND"
+        assert result["ManufacturerName"] == "Texas Instruments"
+        assert result["CustomerReference"] == "R1"
+        assert result["ReferenceDesignator"] == "R1"
+        assert result["Notes"] == "Test note"
+        assert result["SelectedQuantityIndex"] == 0
+        assert result["Attrition"] == 5
+
+    @pytest.mark.unit
+    def test_part_quantity_conversion(self):
+        """Test PartQuantity converts to correct API format."""
+        from src.tools.mylists_tools import PartQuantity
+
+        qty = PartQuantity(
+            quantity=10,
+            target_price=1.50
+        )
+        result = qty.to_dict()
+
+        assert result["Quantity"] == 10
+        assert result["TargetPrice"] == 1.50
+        # None values should be excluded
+        assert "SelectedPackType" not in result
+
+    @pytest.mark.unit
+    def test_part_quantity_excludes_none_values(self):
+        """Test PartQuantity excludes None values from dict."""
+        from src.tools.mylists_tools import PartQuantity
+
+        qty = PartQuantity(quantity=10)
+        result = qty.to_dict()
+
+        assert result == {"Quantity": 10}
+        assert "SelectedPackType" not in result
+        assert "TargetPrice" not in result
+
+    @pytest.mark.unit
+    def test_requested_part_with_quantities(self):
+        """Test RequestedPart with nested quantities list."""
+        from src.tools.mylists_tools import RequestedPart, PartQuantity
+
+        part = RequestedPart(
+            requested_part_number="296-8875-1-ND",
+            customer_reference="R1",
+            reference_designator="R1",
+            quantities=[
+                PartQuantity(quantity=10),
+                PartQuantity(quantity=20, target_price=1.50)
+            ]
+        )
+        result = part.to_dict()
+
+        assert len(result["Quantities"]) == 2
+        assert result["Quantities"][0]["Quantity"] == 10
+        assert result["Quantities"][1]["Quantity"] == 20
+        assert result["Quantities"][1]["TargetPrice"] == 1.50
+        # First quantity should not have TargetPrice
+        assert "TargetPrice" not in result["Quantities"][0]
+
+    @pytest.mark.unit
+    def test_parts_list_produces_valid_array(self):
+        """Test that multiple RequestedParts produce valid JSON array."""
+        from src.tools.mylists_tools import RequestedPart
+        import json
+
+        parts = [
+            RequestedPart(requested_part_number="296-8875-1-ND", customer_reference="R1"),
+            RequestedPart(requested_part_number="P5555-ND", reference_designator="C1")
+        ]
+        parts_list = [p.to_dict() for p in parts]
+
+        # Should be serializable as JSON array
+        json_output = json.dumps(parts_list)
+        parsed = json.loads(json_output)
+
+        assert isinstance(parsed, list)
+        assert len(parsed) == 2
+        assert parsed[0]["RequestedPartNumber"] == "296-8875-1-ND"
+        assert parsed[1]["RequestedPartNumber"] == "P5555-ND"

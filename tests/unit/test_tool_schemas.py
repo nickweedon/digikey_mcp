@@ -431,10 +431,13 @@ class TestMyListsToolsWithFakeServer:
 
         result = get_all_lists()
 
-        assert isinstance(result, list), f"Expected list, got {type(result)}"
+        # Returns dict with 'lists' key (FastMCP requires dict for structured_content)
+        assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+        assert "lists" in result, "Missing 'lists' key in result"
+        assert isinstance(result["lists"], list), f"Expected list, got {type(result['lists'])}"
 
-        if result:
-            lst = result[0]
+        if result["lists"]:
+            lst = result["lists"][0]
             expected_fields = ["ListId", "ListName", "TotalParts", "DateCreated"]
             for field in expected_fields:
                 assert field in lst, f"Missing field '{field}' in list"

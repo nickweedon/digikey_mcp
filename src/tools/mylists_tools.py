@@ -285,7 +285,7 @@ def register_mylists_tools(mcp):
             customer_id: DigiKey Customer ID. Use "0" for default account (default: "0")
 
         Returns:
-            Array of list objects, each containing:
+            Dictionary with 'lists' key containing array of list objects, each with:
             - ListId: Unique identifier for the list
             - ListName: Name of the list
             - CreatedDate: ISO 8601 timestamp when the list was created
@@ -299,7 +299,11 @@ def register_mylists_tools(mcp):
         _require_user_auth()
         url = f"{API_BASE}/mylists/v1/lists"
         headers = _get_headers(customer_id, use_user_token=True)
-        return _make_request("GET", url, headers, use_user_token=True)
+        result = _make_request("GET", url, headers, use_user_token=True)
+        # Wrap list in dict for FastMCP compatibility (structured_content must be dict)
+        if isinstance(result, list):
+            return {"lists": result}
+        return result
 
     @mcp.tool()
     def create_list(
@@ -777,7 +781,7 @@ def register_mylists_tools(mcp):
         parts: List[Dict[str, Any]],
         index: int = 0,
         customer_id: CustomerId = "0"
-    ) -> List[str]:
+    ) -> Dict[str, Any]:
         """Add parts to a list.
 
         Adds one or more parts to the specified list at the given index position.
@@ -807,14 +811,15 @@ def register_mylists_tools(mcp):
             customer_id: DigiKey Customer ID (default: "0")
 
         Returns:
-            Array of unique part identifiers for the added parts
+            Dictionary with 'part_ids' key containing array of unique part identifiers
+            for the added parts
 
         Raises:
             ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails (e.g., 400 for invalid input)
 
         Example:
-            part_ids = add_parts_to_list(
+            result = add_parts_to_list(
                 "abc123",
                 [
                     {
@@ -828,6 +833,7 @@ def register_mylists_tools(mcp):
                     }
                 ]
             )
+            part_ids = result["part_ids"]
         """
         _require_user_auth()
         url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
@@ -866,7 +872,11 @@ def register_mylists_tools(mcp):
             parts_list.append(requested_part.to_dict())
 
         # Send the array directly as the body (not wrapped in an object)
-        return _make_request("POST", url, headers, parts_list, use_user_token=True)
+        result = _make_request("POST", url, headers, parts_list, use_user_token=True)
+        # Wrap list in dict for FastMCP compatibility (structured_content must be dict)
+        if isinstance(result, list):
+            return {"part_ids": result}
+        return result
 
     @mcp.tool()
     def get_part_from_list(
