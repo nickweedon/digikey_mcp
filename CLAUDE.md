@@ -82,6 +82,7 @@ The design always aims to:
 - Never change the structure or field names in the default JMESPath query as this can confuse the LLM
 - Provide Strongly-typed return values
 - Always provide a JMESPath example in the docstring when the tool accepts JMESPath queries
+- Always provide details of the full output schema in the 'returns' part of the docstring for any method that takes JMESPath queries for filtering and projections. Only document the full schema, do not call out the specific shape of the JMESPath default query as this can consfuse the LLM.
 - Error handling patterns
 - Implementation examples with code
 

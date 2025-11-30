@@ -508,9 +508,92 @@ def register_mylists_tools(mcp):
             jmespath_query: Optional JMESPath expression to filter the response
 
         Returns:
-            PartsListResponse with TotalParts count and PartsList array containing
-            detailed part information (pricing, availability, compliance data, etc.).
-            Returns error dict if limit > 200.
+            Dict with parts data filtered by JMESPath query. Returns error dict if
+            limit > 200. Response schema:
+            {
+              "TotalParts": int,
+              "PartsList": [{
+                "PartId": int,
+                "UniqueId": str,
+                "CustomerReference": str,
+                "ReferenceDesignator": str,
+                "Notes": str,
+                "MinOrderQty": int,
+                "MaxOrderQty": int,
+                "OriginalPartNumber": str,
+                "RequestedPartNumber": str,
+                "DigiKeyPartNumber": str,
+                "ManufacturerPartNumber": str,
+                "RequestedManufacturerName": str,
+                "Manufacturer": str,
+                "Description": str,
+                "PartStatus": str,
+                "PartStatusCode": str,
+                "Availability": str|null,
+                "TariffCode": str,
+                "QuantityAvailable": int,
+                "SelectedQuantityIndex": int,
+                "Attrition": int,
+                "VendorLeadWeeks": int,
+                "PartDetailUrl": str,
+                "PrimaryDatasheetUrl": str,
+                "ImageUrl": str,
+                "ThumbnailUrl": str,
+                "ReachStatus": str,
+                "RohsStatusMessage": str,
+                "Eccn": str,
+                "Htsus": str,
+                "CountryOfOrigin": str,
+                "Category": str,
+                "Quantities": [{
+                  "QuantityRequested": int,
+                  "CalculatedQuantity": int,
+                  "TargetPrice": float|null,
+                  "SelectedPackType": str,
+                  "SelectedSubPackType": str,
+                  "IsInactive": bool,
+                  "SelectedPackOptionIndex": int,
+                  "SelectedSubPackOptionIndex": int,
+                  "PackOptions": [{
+                    "PartId": int,
+                    "DigiKeyPartNumber": str,
+                    "ManufacturerPartNumber": str,
+                    "Quantity": int,
+                    "PackType": str,
+                    "QuantityAvailable": int,
+                    "MinimumOrderQuantity": int,
+                    "CalculatedUnitPrice": float,
+                    "ExtendedPrice": float,
+                    "BreakPrice": float,
+                    "BreakQuantity": int,
+                    "IsUpsell": bool,
+                    "FormattedUnitPrice": str,
+                    "FormattedExtendedPrice": str
+                  }]
+                }],
+                "Flags": {
+                  "NonStock": bool,
+                  "IsNCNR": bool,
+                  "IsSDS": bool,
+                  "IsValueAdd": bool,
+                  "IsMatched": bool,
+                  "IsMarketPlace": bool,
+                  "BoNotAllowed": bool,
+                  "IsEditable": bool
+                },
+                "Substitutes": [{
+                  "PartId": int,
+                  "DigiKeyPartNumber": str,
+                  "Manufacturer": str,
+                  "ManufacturerPartNumber": str,
+                  "Description": str,
+                  "SubstituteType": str,
+                  "QuantityAvailable": str,
+                  "UnitPrice": str
+                }],
+                "AlternateParts": []
+              }]
+            }
 
         Raises:
             ValueError: If user is not authenticated

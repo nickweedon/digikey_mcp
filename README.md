@@ -230,3 +230,7 @@ Run the MCP server in a Docker container. This requires mounting the environment
 - `.digikey_tokens` - OAuth token storage (read-write, persists between container runs)
 
 **Note:** Adjust the paths (`C:/docker/...`) to match your local file locations. On Linux/macOS, use Unix-style paths (e.g., `/home/user/docker/...`). 
+
+# Developing
+
+This project is designed to work with vscode and the devcontainers plugin. I recommend also running claude --dangerously-skip-permissions once inside the devcontainer for best results =)

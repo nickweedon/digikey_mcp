@@ -267,9 +267,48 @@ def register_product_tools(mcp):
                            used fields.
 
         Returns:
-            Union[KeywordSearchResponse, Dict[str, Any]]: Filtered dict if JMESPath
-            query provided, otherwise returns filtered dict with commonly used fields.
-            In case of schema build error, returns structured error dict.
+            Dict with product data filtered by JMESPath query. Response schema:
+            {
+              "ProductsCount": int,
+              "Products": [{
+                "ManufacturerProductNumber": str,
+                "UnitPrice": float,
+                "QuantityAvailable": int,
+                "ProductUrl": str,
+                "DatasheetUrl": str|null,
+                "PhotoUrl": str|null,
+                "BackOrderNotAllowed": bool,
+                "NormallyStocking": bool,
+                "Discontinued": bool,
+                "EndOfLife": bool,
+                "Ncnr": bool,
+                "Description": {
+                  "ProductDescription": str,
+                  "DetailedDescription": str|null
+                },
+                "Manufacturer": {
+                  "Id": int,
+                  "Name": str
+                },
+                "ProductStatus": {
+                  "Id": int,
+                  "Status": str
+                },
+                "ProductVariations": [{
+                  "DigiKeyProductNumber": str,
+                  "MinimumOrderQuantity": int,
+                  "StandardPackage": int,
+                  "QuantityAvailableforPackageType": int,
+                  "MarketPlace": bool,
+                  "DigiReelFee": float|null,
+                  "PackageType": {"Id": int, "Name": str},
+                  "StandardPricing": [{"BreakQuantity": int, "UnitPrice": float, "TotalPrice": float}],
+                  "MyPricing": [{"BreakQuantity": int, "UnitPrice": float, "TotalPrice": float}]
+                }],
+                "Category": {"CategoryId": int, "Name": str, "ParentId": int}|null,
+                "Parameters": [{"ParameterId": int, "ParameterText": str, "ValueText": str}]|null
+              }]
+            }
 
         Example:
             # Default filtered fields
