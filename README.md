@@ -174,7 +174,9 @@ This provides strong protection against accidental deletions while maintaining a
 
 ## Claude Desktop Integration
 
-Add this to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add this to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+### Local Installation
 
 ```json
 {
@@ -186,4 +188,45 @@ Add this to your Claude Desktop config (`~/Library/Application Support/Claude/cl
     }
   }
 }
-``` 
+```
+
+### Docker Installation
+
+Run the MCP server in a Docker container. This requires mounting the environment file, SSL certificates, and OAuth token file:
+
+```json
+{
+  "mcpServers": {
+    "digikey": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-p",
+        "8139:8139",
+        "-v",
+        "C:/docker/digikey-mcp-env:/workspace/.env:ro",
+        "-v",
+        "C:/docker/digikey-localhost-key.pem:/workspace/localhost-key.pem:ro",
+        "-v",
+        "C:/docker/digikey-localhost-cert.pem:/workspace/localhost-cert.pem:ro",
+        "-v",
+        "C:/docker/digikey-auth-code:/workspace/.digikey_auth_code",
+        "digikey-mcp:latest",
+        "/bin/bash",
+        "-c",
+        "cd /workspace && uv run digikey_mcp_server.py"
+      ]
+    }
+  }
+}
+```
+
+**Volume mappings:**
+- `.env` - Environment variables (read-only)
+- `localhost-key.pem` - SSL private key for OAuth callback (read-only)
+- `localhost-cert.pem` - SSL certificate for OAuth callback (read-only)
+- `.digikey_auth_code` - OAuth token storage (read-write, persists between container runs)
+
+**Note:** Adjust the paths (`C:/docker/...`) to match your local file locations. On Linux/macOS, use Unix-style paths (e.g., `/home/user/docker/...`). 

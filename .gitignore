@@ -99,3 +99,5 @@ logs/
 
 # UV
 .uv/ 
+
+tool-output/
