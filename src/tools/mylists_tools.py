@@ -511,7 +511,7 @@ def register_mylists_tools(mcp):
             Default Response (when jmespath_query is None):
                 {
                     "TotalParts": int,
-                    "Parts": [
+                    "PartsList": [
                         {
                             "UniqueId": str,           # Unique identifier for this part entry
                             "PartId": int,             # DigiKey internal part ID
@@ -519,22 +519,20 @@ def register_mylists_tools(mcp):
                             "Manufacturer": str,
                             "Description": str,
                             "Availability": str | None,
-                            "StockStatus": str,        # e.g., "Active", "Obsolete"
+                            "PartStatus": str,         # e.g., "Active", "Obsolete"
                             "RequestedQuantity": [int],
                             "PackQuantity": [[int]],   # Nested by quantity/pack option
                             "PackType": [[str]],       # e.g., "Cut Tape", "Tape & Reel"
                             "DigiKeyPartNumber": str,
                             "UnitPrice": [[float]],    # Nested by quantity/pack option
                             "ExtendedPrice": [[float]],
-                            "MinimumOrderQuantity": int,
+                            "MinOrderQty": int,
                             "RequestedPartNumber": str,
-                            "USImportTariff": str,     # HTSUS code
-                            "Note": str,
-                            "PartStatus": str,
+                            "Htsus": str,              # US Import Tariff code
+                            "Notes": str,
                             "CountryOfOrigin": str,
                             "OriginalPartNumber": str,
-                            "ImageUrl": str,
-                            "ProductNotes": str
+                            "ImageUrl": str
                         }
                     ]
                 }
@@ -693,10 +691,12 @@ def register_mylists_tools(mcp):
             requests.HTTPError: If the API request fails (e.g., 404 if list not found)
 
         Example:
-            # Default filtered fields
+            # Default filtered fields (returns PartsList array)
             result = get_parts_by_list_id("abc123", start_index=0, limit=150)
+
             # Custom JMESPath to extract part IDs and pricing
-            q = '{TotalParts: TotalParts, Parts: PartsList[].{Id: PartId, Number: DigiKeyPartNumber, Prices: Quantities[].PackOptions[].{Unit: CalculatedUnitPrice, Ext: ExtendedPrice}}}'
+            # Note: Always use PartsList[] to access the parts array in custom queries
+            q = '{TotalParts: TotalParts, PartsList: PartsList[].{Id: PartId, Number: DigiKeyPartNumber, Prices: Quantities[].PackOptions[].{Unit: CalculatedUnitPrice, Ext: ExtendedPrice}}}'
             result = get_parts_by_list_id("abc123", start_index=0, limit=150, jmespath_query=q)
         """
         _require_user_auth()
@@ -734,29 +734,27 @@ def register_mylists_tools(mcp):
         # If a JMESPath query is provided or default selection should be applied,
         # return the filtered dict directly.
         default_query = (
-            '{TotalParts: TotalParts, Parts: PartsList[].{'
+            '{TotalParts: TotalParts, PartsList: PartsList[].{'
             'UniqueId: UniqueId,'
             'PartId: PartId,'
             'ManufacturerPartNumber: ManufacturerPartNumber,'
             'Manufacturer: Manufacturer,'
             'Description: Description,'
             'Availability: Availability,'
-            'StockStatus: PartStatus,'
+            'PartStatus: PartStatus,'
             'RequestedQuantity: Quantities[].QuantityRequested,'
             'PackQuantity: Quantities[].PackOptions[].Quantity,'
             'PackType: Quantities[].PackOptions[].PackType,'
             'DigiKeyPartNumber: DigiKeyPartNumber,'
             'UnitPrice: Quantities[].PackOptions[].CalculatedUnitPrice,'
             'ExtendedPrice: Quantities[].PackOptions[].ExtendedPrice,'
-            'MinimumOrderQuantity: MinOrderQty,'
+            'MinOrderQty: MinOrderQty,'
             'RequestedPartNumber: RequestedPartNumber,'
-            'USImportTariff: Htsus,'
-            'Note: Notes,'
-            'PartStatus: PartStatus,'
+            'Htsus: Htsus,'
+            'Notes: Notes,'
             'CountryOfOrigin: CountryOfOrigin,'
             'OriginalPartNumber: OriginalPartNumber,'
-            'ImageUrl: ImageUrl,'
-            'ProductNotes: Notes}}'
+            'ImageUrl: ImageUrl}}'
         )
 
         query_to_use = jmespath_query or default_query

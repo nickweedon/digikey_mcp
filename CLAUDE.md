@@ -63,6 +63,17 @@ digikey_mcp/
 
 4. **Import Structure**: Each tools module should import shared clients and expose registration functions. The main server imports and registers tools from each module.
 
+## Design Documentation
+
+The design always aims to:
+- Provide JMESPath filtering and projection when the tool method can return large or complex data types
+- Never change the structure or field names in the default JMESPath query as this can confuse the LLM
+- Provide Strongly-typed return values
+- Always provide a 'returns' description in the docstring tha fully describes the returned type in detail as this is the only way that the LLM can introspect the tool method
+- Error handling patterns
+- Implementation examples with code
+
+
 ## OAuth Implementation
 
 DigiKey requires OAuth 2.0 authentication for user-specific operations (MyLists). The implementation includes:
