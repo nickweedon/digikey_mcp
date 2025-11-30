@@ -3,7 +3,7 @@ name = "digikey-mcp"
 version = "0.1.0"
 description = "DigiKey MCP Server for product search"
 dependencies = [
-    "fastmcp",
+    "fastmcp>=2.10.0",
     "requests",
     "python-dotenv",
     "jmespath",

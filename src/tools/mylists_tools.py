@@ -484,13 +484,11 @@ def register_mylists_tools(mcp):
 
         Retrieves detailed information about all parts in a list, including pricing,
         availability, lead times, datasheets, and compliance data. Supports pagination
-        for large lists. The limit should never exceed 200 for this function; if it does,
-        a structured JSON error object is returned instead of raising an exception.
+        for large lists.
 
-        Optional JMESPath filtering can be applied to pre-shape the response. When
-        `jmespath_query` is provided, the function returns a filtered JSON (dict)
-        according to the JMESPath expression. If not provided, a sensible default
-        query is used that selects commonly needed fields.
+        Optional JMESPath filtering can be applied to shape the response. If omitted,
+        a default query selects commonly used fields. Custom queries operate on the
+        same response structure (use PartsList[] to access the parts array).
 
         ⚠️ Requires user authentication via oauth_start_login()
 
@@ -499,166 +497,20 @@ def register_mylists_tools(mcp):
         Args:
             list_id: The unique identifier of the list
             start_index: Starting position for pagination (default: 0)
-            limit: Maximum number of parts to return (default: 100, for this function it should not exceed 200)
+            limit: Maximum number of parts to return (max: 200)
             assemblies: Units per part, minimum 1 (default: 1)
-            include_attrition: If True, includes attrition data in response (default: False)
+            include_attrition: If True, includes attrition data in response
             customer_id: DigiKey Customer ID (default: "0")
-            jmespath_query: Optional JMESPath expression to filter and shape the response.
-                            If omitted, a default query selects commonly used fields.
-                            Custom queries operate on the same response structure.
+            jmespath_query: Optional JMESPath expression to filter the response
 
         Returns:
-            Response structure (filtered by default or custom jmespath_query):
-                {
-                    "TotalParts": int,
-                    "PartsList": [
-                        {
-                            "PartId": int,
-                            "UniqueId": str,
-                            "CustomerReference": str,
-                            "ReferenceDesignator": str,
-                            "Notes": str,
-                            "MinOrderQty": int,
-                            "MaxOrderQty": int,
-                            "OriginalPartNumber": str,
-                            "RequestedPartNumber": str,
-                            "DigiKeyPartNumber": str,
-                            "ManufacturerPartNumber": str,
-                            "RequestedManufacturerName": str,
-                            "Manufacturer": str,
-                            "Description": str,
-                            "PartStatus": str,
-                            "PartStatusCode": str,
-                            "Availability": str | None,
-                            "TariffCode": str,
-                            "QuantityAvailable": int,
-                            "SelectedQuantityIndex": int,
-                            "Attrition": int | float,
-                            "VendorLeadWeeks": int,
-                            "PartDetailUrl": str,
-                            "PrimaryDatasheetUrl": str,
-                            "ImageUrl": str,
-                            "ThumbnailUrl": str,
-                            "MarketPlaceSupplierLink": str,
-                            "SupplierName": str,
-                            "ReachStatus": str,
-                            "RohsStatusMessage": str,
-                            "Eccn": str,
-                            "Htsus": str,
-                            "CountryOfOrigin": str,
-                            "EnvironmentalDocs": {str: str},
-                            "Category": str,
-                            "CrefsAvailableForPart": [str],
-                            "Quantities": [
-                                {
-                                    "QuantityRequested": int,
-                                    "CalculatedQuantity": int,
-                                    "TargetPrice": float | None,
-                                    "SelectedPackType": str,
-                                    "SelectedSubPackType": str,
-                                    "IsInactive": bool,
-                                    "SelectedPackOptionIndex": int,
-                                    "SelectedSubPackOptionIndex": int,
-                                    "PackOptions": [
-                                        {
-                                            "PartId": int,
-                                            "DigiKeyPartNumber": str,
-                                            "ManufacturerPartNumber": str,
-                                            "Quantity": int,
-                                            "PackType": str,
-                                            "QuantityAvailable": int,
-                                            "MinimumOrderQuantity": int,
-                                            "CalculatedUnitPrice": float,
-                                            "ExtendedPrice": float,
-                                            "BreakPrice": float,
-                                            "BreakQuantity": int,
-                                            "IsUpsell": bool,
-                                            "ValueAdditionalFee": float,
-                                            "SubPackOptions": [any],
-                                            "FormattedUnitPrice": str,
-                                            "FormattedExtendedPrice": str
-                                        }
-                                    ] | None
-                                }
-                            ],
-                            "Flags": {
-                                "NonStock": bool,
-                                "IsNCNR": bool,
-                                "IsSDS": bool,
-                                "IsValueAdd": bool,
-                                "IsMatched": bool,
-                                "IsMarketPlace": bool,
-                                "BoNotAllowed": bool,
-                                "DisplayRegularLeadTime": bool,
-                                "DisplayCheckActiveLeadTime": bool,
-                                "MultipleCrefsForPart": bool,
-                                "MultiplePartsForCref": bool,
-                                "IsChecked": bool,
-                                "IsEditable": bool,
-                                "IsDeniedByCountry": bool,
-                                "IsDeniedByCurrency": bool,
-                                "IsDeniedByCustomerId": bool
-                            },
-                            "Substitutes": [
-                                {
-                                    "PartId": int,
-                                    "DigiKeyPartNumber": str,
-                                    "Manufacturer": str,
-                                    "ManufacturerPartNumber": str,
-                                    "Description": str,
-                                    "PartDetailUrl": str,
-                                    "SubstituteType": str,
-                                    "MinimumOrderQuantity": int,
-                                    "QuantityAvailable": str,
-                                    "TariffStatus": str,
-                                    "MasterPartId": int,
-                                    "UnitPrice": str
-                                }
-                            ] | None,
-                            "AlternateParts": [
-                                {
-                                    "PartId": int,
-                                    "DigiKeyPartNumber": str,
-                                    "Manufacturer": str,
-                                    "ManufacturerPartNumber": str,
-                                    "Description": str,
-                                    "PartDetailUrl": str,
-                                    "SubstituteType": str,
-                                    "MinimumOrderQuantity": int,
-                                    "QuantityAvailable": str,
-                                    "TariffStatus": str,
-                                    "MasterPartId": int,
-                                    "UnitPrice": str
-                                }
-                            ],
-                            "PartsAvailableForCref": [
-                                {
-                                    "ManufacturerPartnumber": str,
-                                    "Manufacturer": str,
-                                    "MinimumOrderQuantity": int,
-                                    "Description": str,
-                                    "QuantityAvailable": int
-                                }
-                            ]
-                        }
-                    ]
-                }
-
-            Error Response (when limit > 200):
-                {
-                    "error": {
-                        "type": "InvalidLimit",
-                        "code": "LIMIT_TOO_HIGH",
-                        "message": "limit must be <= 200",
-                        "providedLimit": int,
-                        "allowedMax": 200,
-                        "listId": str
-                    }
-                }
+            PartsListResponse with TotalParts count and PartsList array containing
+            detailed part information (pricing, availability, compliance data, etc.).
+            Returns error dict if limit > 200.
 
         Raises:
             ValueError: If user is not authenticated
-            requests.HTTPError: If the API request fails (e.g., 404 if list not found)
+            requests.HTTPError: If the API request fails
 
         Example:
             # Default filtered fields (returns PartsList array)
