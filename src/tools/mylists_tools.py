@@ -505,14 +505,188 @@ def register_mylists_tools(mcp):
             customer_id: DigiKey Customer ID (default: "0")
             jmespath_query: Optional JMESPath expression to pre-filter and shape the
                             response. If omitted, a default query returns only commonly
-                            used fields.
+                            used fields (see Default Response below).
 
         Returns:
-            Dictionary containing:
-            - PartsList: Array of part objects with detailed information
-            - TotalParts: Total number of parts in the list
-            Each part includes: part number, pricing, availability, datasheets,
-            quantities, lead times, RoHS status, and other metadata
+            Default Response (when jmespath_query is None):
+                {
+                    "TotalParts": int,
+                    "Parts": [
+                        {
+                            "UniqueId": str,           # Unique identifier for this part entry
+                            "PartId": int,             # DigiKey internal part ID
+                            "ManufacturerPartNumber": str,
+                            "Manufacturer": str,
+                            "Description": str,
+                            "Availability": str | None,
+                            "StockStatus": str,        # e.g., "Active", "Obsolete"
+                            "RequestedQuantity": [int],
+                            "PackQuantity": [[int]],   # Nested by quantity/pack option
+                            "PackType": [[str]],       # e.g., "Cut Tape", "Tape & Reel"
+                            "DigiKeyPartNumber": str,
+                            "UnitPrice": [[float]],    # Nested by quantity/pack option
+                            "ExtendedPrice": [[float]],
+                            "MinimumOrderQuantity": int,
+                            "RequestedPartNumber": str,
+                            "USImportTariff": str,     # HTSUS code
+                            "Note": str,
+                            "PartStatus": str,
+                            "CountryOfOrigin": str,
+                            "OriginalPartNumber": str,
+                            "ImageUrl": str,
+                            "ProductNotes": str
+                        }
+                    ]
+                }
+
+            Full Response (when jmespath_query is provided, or on JMESPath error):
+                PartsListResponse object with structure:
+                {
+                    "TotalParts": int,
+                    "PartsList": [
+                        {
+                            "PartId": int,
+                            "UniqueId": str,
+                            "CustomerReference": str,
+                            "ReferenceDesignator": str,
+                            "Notes": str,
+                            "MinOrderQty": int,
+                            "MaxOrderQty": int,
+                            "OriginalPartNumber": str,
+                            "RequestedPartNumber": str,
+                            "DigiKeyPartNumber": str,
+                            "ManufacturerPartNumber": str,
+                            "RequestedManufacturerName": str,
+                            "Manufacturer": str,
+                            "Description": str,
+                            "PartStatus": str,
+                            "PartStatusCode": str,
+                            "Availability": str | None,
+                            "TariffCode": str,
+                            "QuantityAvailable": int,
+                            "SelectedQuantityIndex": int,
+                            "Attrition": int | float,
+                            "VendorLeadWeeks": int,
+                            "PartDetailUrl": str,
+                            "PrimaryDatasheetUrl": str,
+                            "ImageUrl": str,
+                            "ThumbnailUrl": str,
+                            "MarketPlaceSupplierLink": str,
+                            "SupplierName": str,
+                            "ReachStatus": str,
+                            "RohsStatusMessage": str,
+                            "Eccn": str,
+                            "Htsus": str,
+                            "CountryOfOrigin": str,
+                            "EnvironmentalDocs": {str: str},
+                            "Category": str,
+                            "CrefsAvailableForPart": [str],
+                            "Quantities": [
+                                {
+                                    "QuantityRequested": int,
+                                    "CalculatedQuantity": int,
+                                    "TargetPrice": float | None,
+                                    "SelectedPackType": str,
+                                    "SelectedSubPackType": str,
+                                    "IsInactive": bool,
+                                    "SelectedPackOptionIndex": int,
+                                    "SelectedSubPackOptionIndex": int,
+                                    "PackOptions": [
+                                        {
+                                            "PartId": int,
+                                            "DigiKeyPartNumber": str,
+                                            "ManufacturerPartNumber": str,
+                                            "Quantity": int,
+                                            "PackType": str,
+                                            "QuantityAvailable": int,
+                                            "MinimumOrderQuantity": int,
+                                            "CalculatedUnitPrice": float,
+                                            "ExtendedPrice": float,
+                                            "BreakPrice": float,
+                                            "BreakQuantity": int,
+                                            "IsUpsell": bool,
+                                            "ValueAdditionalFee": float,
+                                            "SubPackOptions": [any],
+                                            "FormattedUnitPrice": str,
+                                            "FormattedExtendedPrice": str
+                                        }
+                                    ] | None
+                                }
+                            ],
+                            "Flags": {
+                                "NonStock": bool,
+                                "IsNCNR": bool,
+                                "IsSDS": bool,
+                                "IsValueAdd": bool,
+                                "IsMatched": bool,
+                                "IsMarketPlace": bool,
+                                "BoNotAllowed": bool,
+                                "DisplayRegularLeadTime": bool,
+                                "DisplayCheckActiveLeadTime": bool,
+                                "MultipleCrefsForPart": bool,
+                                "MultiplePartsForCref": bool,
+                                "IsChecked": bool,
+                                "IsEditable": bool,
+                                "IsDeniedByCountry": bool,
+                                "IsDeniedByCurrency": bool,
+                                "IsDeniedByCustomerId": bool
+                            },
+                            "Substitutes": [
+                                {
+                                    "PartId": int,
+                                    "DigiKeyPartNumber": str,
+                                    "Manufacturer": str,
+                                    "ManufacturerPartNumber": str,
+                                    "Description": str,
+                                    "PartDetailUrl": str,
+                                    "SubstituteType": str,
+                                    "MinimumOrderQuantity": int,
+                                    "QuantityAvailable": str,
+                                    "TariffStatus": str,
+                                    "MasterPartId": int,
+                                    "UnitPrice": str
+                                }
+                            ] | None,
+                            "AlternateParts": [
+                                {
+                                    "PartId": int,
+                                    "DigiKeyPartNumber": str,
+                                    "Manufacturer": str,
+                                    "ManufacturerPartNumber": str,
+                                    "Description": str,
+                                    "PartDetailUrl": str,
+                                    "SubstituteType": str,
+                                    "MinimumOrderQuantity": int,
+                                    "QuantityAvailable": str,
+                                    "TariffStatus": str,
+                                    "MasterPartId": int,
+                                    "UnitPrice": str
+                                }
+                            ],
+                            "PartsAvailableForCref": [
+                                {
+                                    "ManufacturerPartnumber": str,
+                                    "Manufacturer": str,
+                                    "MinimumOrderQuantity": int,
+                                    "Description": str,
+                                    "QuantityAvailable": int
+                                }
+                            ]
+                        }
+                    ]
+                }
+
+            Error Response (when limit > 200):
+                {
+                    "error": {
+                        "type": "InvalidLimit",
+                        "code": "LIMIT_TOO_HIGH",
+                        "message": "limit must be <= 200",
+                        "providedLimit": int,
+                        "allowedMax": 200,
+                        "listId": str
+                    }
+                }
 
         Raises:
             ValueError: If user is not authenticated
