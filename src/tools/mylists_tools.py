@@ -503,42 +503,12 @@ def register_mylists_tools(mcp):
             assemblies: Units per part, minimum 1 (default: 1)
             include_attrition: If True, includes attrition data in response (default: False)
             customer_id: DigiKey Customer ID (default: "0")
-            jmespath_query: Optional JMESPath expression to pre-filter and shape the
-                            response. If omitted, a default query returns only commonly
-                            used fields (see Default Response below).
+            jmespath_query: Optional JMESPath expression to filter and shape the response.
+                            If omitted, a default query selects commonly used fields.
+                            Custom queries operate on the same response structure.
 
         Returns:
-            Default Response (when jmespath_query is None):
-                {
-                    "TotalParts": int,
-                    "PartsList": [
-                        {
-                            "UniqueId": str,           # Unique identifier for this part entry
-                            "PartId": int,             # DigiKey internal part ID
-                            "ManufacturerPartNumber": str,
-                            "Manufacturer": str,
-                            "Description": str,
-                            "Availability": str | None,
-                            "PartStatus": str,         # e.g., "Active", "Obsolete"
-                            "RequestedQuantity": [int],
-                            "PackQuantity": [[int]],   # Nested by quantity/pack option
-                            "PackType": [[str]],       # e.g., "Cut Tape", "Tape & Reel"
-                            "DigiKeyPartNumber": str,
-                            "UnitPrice": [[float]],    # Nested by quantity/pack option
-                            "ExtendedPrice": [[float]],
-                            "MinOrderQty": int,
-                            "RequestedPartNumber": str,
-                            "Htsus": str,              # US Import Tariff code
-                            "Notes": str,
-                            "CountryOfOrigin": str,
-                            "OriginalPartNumber": str,
-                            "ImageUrl": str
-                        }
-                    ]
-                }
-
-            Full Response (when jmespath_query is provided, or on JMESPath error):
-                PartsListResponse object with structure:
+            Response structure (filtered by default or custom jmespath_query):
                 {
                     "TotalParts": int,
                     "PartsList": [
