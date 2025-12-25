@@ -1,7 +1,7 @@
 """OAuth MCP Tools"""
 import time
 import logging
-from src.config import REDIRECT_URI
+from src.config import REDIRECT_URI, get_redirect_uri
 from src.oauth.state import oauth_state
 from src.oauth.server import start_oauth_server
 from src.oauth.flow import generate_authorization_url, exchange_code_for_token, refresh_user_token
@@ -31,14 +31,18 @@ def register_oauth_tools(mcp):
         start_oauth_server()
         auth_url = generate_authorization_url()
 
+        # Get actual callback URL for display
+        callback_url = get_redirect_uri()
+
         return {
             "status": "ready",
             "authorization_url": auth_url,
+            "callback_url": callback_url,
             "instructions": [
                 "1. Open the authorization_url in your web browser",
                 "2. Log in to your DigiKey account",
                 "3. Authorize the application to access your MyLists",
-                "4. You will be redirected to a success page",
+                f"4. You will be redirected to {callback_url}",
                 "5. Let me know once you have done this and I will call oauth_complete_login() to finalize the authentication"
             ]
         }

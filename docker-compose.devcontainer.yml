@@ -14,6 +14,8 @@ services:
       - USE_SANDBOX=${USE_SANDBOX}
     env_file:
       - .env
+    ports:
+      - "0:8139"
     # Run as vscode user for devcontainer
     user: vscode
     # Mount local workspace for live development

@@ -94,6 +94,13 @@ def start_oauth_server():
         logger.info("OAuth callback server already running")
         return
 
+    # Trigger port discovery before starting server
+    from src.config import get_redirect_uri
+    from src.oauth.port_discovery import port_discovery
+
+    callback_url = get_redirect_uri()
+    actual_port = port_discovery.get_callback_port()
+
     def run_server():
         try:
             oauth_state.http_server = HTTPServer(('0.0.0.0', OAUTH_PORT), OAuthCallbackHandler)
@@ -111,7 +118,12 @@ def start_oauth_server():
                 server_side=True
             )
 
-            logger.info(f"✓ OAuth callback server started on https://localhost:{OAUTH_PORT}")
+            # Enhanced logging to show actual callback URL
+            logger.info(f"✓ OAuth callback server started")
+            logger.info(f"  Container listening on: https://0.0.0.0:{OAUTH_PORT}")
+            logger.info(f"  OAuth callback URL: {callback_url}")
+            if actual_port != OAUTH_PORT:
+                logger.info(f"  Host port mapping: {actual_port} → {OAUTH_PORT}")
             logger.info("⚠️  Using self-signed certificate - browser will show security warning (this is normal)")
             oauth_state.http_server.serve_forever()
         except Exception as e:

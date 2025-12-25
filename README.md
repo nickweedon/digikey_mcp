@@ -192,7 +192,57 @@ Add this to your Claude Desktop config (`~/Library/Application Support/Claude/cl
 
 ### Docker Installation
 
-Run the MCP server in a Docker container. This requires mounting the environment file, SSL certificates, and OAuth token file:
+The DigiKey MCP server supports automatic port discovery when running in Docker. The container automatically detects which host port is mapped to its OAuth callback server, enabling ephemeral port binding that avoids port conflicts.
+
+#### Starting the Container
+
+First, start the container using docker-compose:
+
+```bash
+docker-compose build
+docker-compose up -d
+```
+
+The container will log the actual callback URL on startup:
+```
+✓ OAuth callback server started
+  Container listening on: https://0.0.0.0:8139
+  OAuth callback URL: https://localhost:54321/callback
+  Host port mapping: 54321 → 8139
+```
+
+#### Claude Desktop Configuration
+
+**Option 1: Using docker-compose (Recommended)**
+
+First, start the container with docker-compose:
+```bash
+docker-compose up -d
+```
+
+Then connect via `docker exec`:
+```json
+{
+  "mcpServers": {
+    "digikey": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "digikey-mcp-server",
+        "uv",
+        "run",
+        "python",
+        "digikey_mcp_server.py"
+      ]
+    }
+  }
+}
+```
+
+**Option 2: Standalone docker run with ephemeral port**
+
+Run the container directly with all necessary mounts and ephemeral port binding:
 
 ```json
 {
@@ -204,7 +254,7 @@ Run the MCP server in a Docker container. This requires mounting the environment
         "-i",
         "--rm",
         "-p",
-        "8139:8139",
+        "0:8139",
         "-v",
         "C:/docker/digikey-mcp-env:/workspace/.env:ro",
         "-v",
@@ -213,6 +263,8 @@ Run the MCP server in a Docker container. This requires mounting the environment
         "C:/docker/digikey-localhost-cert.pem:/workspace/localhost-cert.pem:ro",
         "-v",
         "C:/docker/digikey-tokens:/workspace/.digikey_tokens",
+        "-v",
+        "/var/run/docker.sock:/var/run/docker.sock:ro",
         "digikey-mcp:latest",
         "/bin/bash",
         "-c",
@@ -224,12 +276,50 @@ Run the MCP server in a Docker container. This requires mounting the environment
 ```
 
 **Volume mappings:**
-- `.env` - Environment variables (read-only)
-- `localhost-key.pem` - SSL private key for OAuth callback (read-only)
-- `localhost-cert.pem` - SSL certificate for OAuth callback (read-only)
-- `.digikey_tokens` - OAuth token storage (read-write, persists between container runs)
+- `.env` - Environment variables (CLIENT_ID, CLIENT_SECRET, etc.) - read-only
+- `localhost-key.pem` - SSL private key for OAuth callback - read-only
+- `localhost-cert.pem` - SSL certificate for OAuth callback - read-only
+- `.digikey_tokens` - OAuth token storage - read-write (persists between container runs)
+- `/var/run/docker.sock` - Docker socket for port discovery - read-only
 
-**Note:** Adjust the paths (`C:/docker/...`) to match your local file locations. On Linux/macOS, use Unix-style paths (e.g., `/home/user/docker/...`). 
+**Note:**
+- Adjust the paths (`C:/docker/...`) to match your local file locations
+- On Linux/macOS, use Unix-style paths (e.g., `/home/user/docker/...`)
+- On Windows, use WSL paths if running Docker via WSL (e.g., `/mnt/c/docker/...`)
+- Port mapping `-p 0:8139` enables ephemeral port binding with automatic discovery
+
+#### Finding the Assigned Port (for troubleshooting)
+
+To check which port was assigned:
+
+```bash
+# View port mapping
+docker port digikey-mcp-server 8139
+
+# View callback URL in logs
+docker logs digikey-mcp-server | grep "OAuth callback URL"
+```
+
+#### Using a Fixed Port (Optional)
+
+If you prefer a fixed port instead of ephemeral assignment, set it in `.env`:
+
+```bash
+OAUTH_PORT=8139
+```
+
+And update `docker-compose.yml`:
+```yaml
+ports:
+  - "8139:8139"
+```
+
+#### How Automatic Port Discovery Works
+
+- Docker assigns an available host port when using `0:8139` mapping
+- Container queries Docker API via `/var/run/docker.sock` to discover the mapping
+- OAuth callback URL dynamically uses the discovered port
+- DigiKey OAuth works because the app is registered with `localhost` (no specific port required) 
 
 # Developing
 

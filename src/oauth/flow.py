@@ -6,7 +6,7 @@ import requests
 import webbrowser
 from src.config import (
     CLIENT_ID, CLIENT_SECRET, TOKEN_URL, AUTHORIZE_URL,
-    REDIRECT_URI
+    REDIRECT_URI, get_redirect_uri
 )
 from src.oauth.state import oauth_state
 from src.oauth.server import start_oauth_server
@@ -47,7 +47,7 @@ def generate_authorization_url():
     params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": get_redirect_uri(),
         "state": oauth_state.auth_state,
     }
 
@@ -65,7 +65,7 @@ def exchange_code_for_token(code: str):
         "code": code,
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": get_redirect_uri(),
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 

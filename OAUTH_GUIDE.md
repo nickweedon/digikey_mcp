@@ -62,11 +62,52 @@ oauth_logout()
 CLIENT_ID=your_client_id
 CLIENT_SECRET=your_client_secret
 USE_SANDBOX=false
-REDIRECT_URI=https://localhost:8139/callback
-OAUTH_PORT=8139
+# Optional: Override automatic port discovery (defaults to 8139 or discovered port)
+# REDIRECT_URI=https://localhost:8139/callback
+# OAUTH_PORT=8139
 TOKEN_FILE=.digikey_tokens
 SSL_CERT_FILE=localhost-cert.pem
 SSL_KEY_FILE=localhost-key.pem
+```
+
+### Docker Deployment with Automatic Port Discovery
+
+When running in Docker, the server automatically discovers the host port mapped to the OAuth callback endpoint.
+
+**How It Works:**
+1. **Docker assigns ephemeral port**: `docker-compose.yml` uses `0:8139` mapping
+2. **Container detects mapping**: Queries Docker API via `/var/run/docker.sock`
+3. **Dynamic redirect URI**: Uses discovered port (e.g., `https://localhost:54321/callback`)
+4. **Seamless OAuth**: DigiKey OAuth works because app is registered with `localhost` (no specific port)
+
+**Docker Compose Configuration:**
+```yaml
+services:
+  digikey-mcp:
+    ports:
+      - "0:8139"  # Ephemeral host port
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # For port discovery
+```
+
+**Finding the Callback URL:**
+
+After starting the container:
+```bash
+# View logs to see discovered callback URL
+docker logs digikey-mcp-server | grep "OAuth callback URL"
+
+# Or query port mapping directly
+docker port digikey-mcp-server 8139
+```
+
+**Environment Variable Overrides:**
+```bash
+# Force specific redirect URI (overrides discovery)
+REDIRECT_URI=https://localhost:9000/callback
+
+# Container internal port (default: 8139)
+OAUTH_PORT=8139
 ```
 
 ## SSL Certificate Setup
@@ -112,3 +153,15 @@ For production, use a proper SSL certificate from a trusted Certificate Authorit
 **Token expires?**
 - Server auto-refreshes using the refresh token
 - If refresh fails, re-authenticate via browser
+
+**Port discovery fails in Docker?**
+- Check Docker socket is mounted: `docker exec digikey-mcp-server ls -la /var/run/docker.sock`
+- Check container has access: `docker exec digikey-mcp-server docker ps` (should list containers)
+- Verify logs show discovery attempt: `docker logs digikey-mcp-server | grep "Discovered host port"`
+- **Fallback**: Server automatically uses configured `OAUTH_PORT` (default 8139) if discovery fails
+
+**Browser can't connect to callback URL?**
+- Verify port mapping: `docker port digikey-mcp-server`
+- Check firewall allows localhost connections
+- Try setting explicit `REDIRECT_URI` in `.env` file
+- Ensure SSL certificates are mounted correctly
