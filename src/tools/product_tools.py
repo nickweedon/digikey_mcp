@@ -227,6 +227,378 @@ class ProductDetailsResponse:
     Eccn: Optional[str] = None
 
 
+# Implementation Functions
+# These are exposed for use in bulk operations
+
+def _keyword_search_impl(
+    keywords: str,
+    limit: int = 5,
+    offset: int = 0,
+    cache_key: str = None,
+    manufacturer_id: str = None,
+    category_id: str = None,
+    search_options: str = None,
+    sort_field: str = None,
+    sort_order: str = "Ascending",
+    jmespath_query: Optional[str] = None
+) -> Union[KeywordSearchResponse, Dict[str, Any]]:
+    """Implementation of keyword search - used by both MCP tool and bulk operations."""
+    # Validate parameters
+    if limit < 1 or limit > 1000:
+        return {
+            "error": "limit must be between 1 and 1000",
+            "cache_key": "",
+            "total": 0,
+            "offset": 0,
+            "limit": limit,
+            "has_more": False,
+            "ProductsCount": 0,
+            "Products": []
+        }
+
+    if offset < 0:
+        return {
+            "error": "offset must be non-negative",
+            "cache_key": "",
+            "total": 0,
+            "offset": 0,
+            "limit": limit,
+            "has_more": False,
+            "ProductsCount": 0,
+            "Products": []
+        }
+
+    # Get or fetch data
+    all_products = []
+    key = ""
+
+    if cache_key:
+        # Try to use cached data
+        entry = search_cache.get(cache_key)
+        if entry:
+            all_products = entry.data
+            key = cache_key
+        else:
+            # Cache miss - will fetch fresh below
+            cache_key = None
+
+    if not cache_key:
+        # Fetch fresh data from DigiKey API
+        url = f"{API_BASE}/products/v4/search/keyword"
+        headers = _get_headers()
+
+        # Build base request body
+        body = {
+            "Keywords": keywords,
+            "Limit": 50  # Request maximum per page
+        }
+
+        if manufacturer_id:
+            body["ManufacturerId"] = manufacturer_id
+        if category_id:
+            body["CategoryId"] = category_id
+        if search_options:
+            body["SearchOptionList"] = search_options.split(",")
+
+        if sort_field:
+            body["SortOptions"] = {
+                "Field": sort_field,
+                "SortOrder": sort_order
+            }
+
+        # Page through all results
+        api_offset = 0
+        max_pages = 100  # Safety limit (5000 products max)
+
+        while len(all_products) < 5000 and api_offset < max_pages * 50:
+            # Set offset for pagination
+            body["Offset"] = api_offset
+
+            # Make API request
+            page_response = _make_request("POST", url, headers, body, use_user_token=False)
+
+            # Extract products from this page
+            page_products = page_response.get("Products", [])
+
+            # If no products returned, we've reached the end
+            if not page_products:
+                break
+
+            # Add products to our collection
+            all_products.extend(page_products)
+
+            # If we got fewer than 50 products, we've reached the end
+            if len(page_products) < 50:
+                break
+
+            # Move to next page
+            api_offset += 50
+
+        # Store in cache
+        key = search_cache.create(all_products)
+
+    # Build a response structure with all products (for JMESPath processing)
+    response = {
+        "Products": all_products,
+        "ProductsCount": len(all_products)
+    }
+
+    # Default JMESPath query that extracts commonly used fields
+    default_query = (
+        '{ProductsCount: ProductsCount, Products: Products[].{'
+        'DigiKeyPartNumber: ProductVariations[0].DigiKeyProductNumber,'
+        'ManufacturerPartNumber: ManufacturerProductNumber,'
+        'Manufacturer: Manufacturer.Name,'
+        'Description: Description.ProductDescription,'
+        'UnitPrice: UnitPrice,'
+        'QuantityAvailable: QuantityAvailable,'
+        'MinimumOrderQuantity: ProductVariations[0].MinimumOrderQuantity,'
+        'ProductStatus: ProductStatus.Status,'
+        'ProductUrl: ProductUrl,'
+        'DatasheetUrl: DatasheetUrl,'
+        'PhotoUrl: PhotoUrl,'
+        'InStock: (QuantityAvailable > `0`),'
+        'Pricing: ProductVariations[0].StandardPricing}}'
+    )
+
+    # Apply JMESPath query if provided or use default
+    query_to_use = jmespath_query or default_query
+    try:
+        filtered = search_with_custom_functions(query_to_use, response)
+        if filtered is not None:
+            # If using default query, filtered will have Products array
+            if isinstance(filtered, dict) and "Products" in filtered:
+                # Get products list for pagination
+                products_list = filtered.get("Products", [])
+                total = len(products_list)
+
+                # Apply pagination to filtered results
+                paginated_products = products_list[offset:offset + limit]
+
+                # Build paginated response
+                filtered["cache_key"] = key
+                filtered["total"] = total
+                filtered["offset"] = offset
+                filtered["limit"] = limit
+                filtered["has_more"] = offset + limit < total
+                filtered["Products"] = paginated_products
+                filtered["ProductsCount"] = len(paginated_products)
+
+                return filtered
+            else:
+                # Custom query returned non-standard structure
+                # Wrap it with pagination metadata
+                if isinstance(filtered, list):
+                    # Query returned a list directly
+                    total = len(filtered)
+                    paginated = filtered[offset:offset + limit]
+                    return {
+                        "cache_key": key,
+                        "total": total,
+                        "offset": offset,
+                        "limit": limit,
+                        "has_more": offset + limit < total,
+                        "ProductsCount": len(paginated),
+                        "Products": paginated
+                    }
+                else:
+                    # Query returned an object or scalar - preserve it
+                    result = {
+                        "cache_key": key,
+                        "total": 1,
+                        "offset": 0,
+                        "limit": limit,
+                        "has_more": False
+                    }
+                    # Merge the custom result into the response
+                    if isinstance(filtered, dict):
+                        result.update(filtered)
+                    else:
+                        result["data"] = filtered
+                    return result
+    except Exception:
+        # Fall back to schema build with error metadata
+        pass
+
+    # Build dataclass response according to schema, preserving extra fields
+    try:
+        raw_products = response.get("Products", [])
+        total = len(raw_products)
+
+        # Apply pagination
+        paginated_products = raw_products[offset:offset + limit]
+        products_count = len(paginated_products)
+
+        products_dc: List[Product] = []
+        for p in paginated_products:
+            # Build Description
+            desc_raw = p.get("Description", {})
+            description = Description(
+                ProductDescription=desc_raw.get("ProductDescription", ""),
+                DetailedDescription=desc_raw.get("DetailedDescription")
+            )
+
+            # Build Manufacturer
+            mfr_raw = p.get("Manufacturer", {})
+            manufacturer = Manufacturer(
+                Id=int(mfr_raw.get("Id", 0)),
+                Name=mfr_raw.get("Name", "")
+            )
+
+            # Build ProductStatus
+            status_raw = p.get("ProductStatus", {})
+            product_status = ProductStatus(
+                Id=int(status_raw.get("Id", 0)),
+                Status=status_raw.get("Status", "")
+            )
+
+            # Build ProductVariations
+            variations_raw = p.get("ProductVariations", [])
+            variations_dc = []
+            for v in variations_raw:
+                # Build PackageType
+                pkg_raw = v.get("PackageType", {})
+                package_type = PackageType(
+                    Id=int(pkg_raw.get("Id", 0)),
+                    Name=pkg_raw.get("Name", "")
+                )
+
+                # Build Supplier (optional)
+                supplier = None
+                supplier_raw = v.get("Supplier")
+                if supplier_raw:
+                    supplier = Supplier(
+                        Id=int(supplier_raw.get("Id", 0)),
+                        Name=supplier_raw.get("Name", "")
+                    )
+
+                # Build StandardPricing
+                std_pricing_raw = v.get("StandardPricing", [])
+                std_pricing_dc = []
+                for tier in std_pricing_raw:
+                    std_pricing_dc.append(
+                        PricingTier(
+                            BreakQuantity=int(tier.get("BreakQuantity", 0)),
+                            UnitPrice=float(tier.get("UnitPrice", 0.0)),
+                            TotalPrice=float(tier.get("TotalPrice", 0.0))
+                        )
+                    )
+
+                # Build MyPricing
+                my_pricing_raw = v.get("MyPricing", [])
+                my_pricing_dc = []
+                for tier in my_pricing_raw:
+                    my_pricing_dc.append(
+                        PricingTier(
+                            BreakQuantity=int(tier.get("BreakQuantity", 0)),
+                            UnitPrice=float(tier.get("UnitPrice", 0.0)),
+                            TotalPrice=float(tier.get("TotalPrice", 0.0))
+                        )
+                    )
+
+                variations_dc.append(
+                    ProductVariation(
+                        DigiKeyProductNumber=v.get("DigiKeyProductNumber", ""),
+                        PackageType=package_type,
+                        StandardPricing=std_pricing_dc,
+                        MyPricing=my_pricing_dc,
+                        MarketPlace=bool(v.get("MarketPlace", False)),
+                        QuantityAvailableforPackageType=int(v.get("QuantityAvailableforPackageType", 0)),
+                        MinimumOrderQuantity=int(v.get("MinimumOrderQuantity", 0)),
+                        StandardPackage=int(v.get("StandardPackage", 0)),
+                        Supplier=supplier,
+                        TariffActive=v.get("TariffActive"),
+                        MaxQuantityForDistribution=v.get("MaxQuantityForDistribution"),
+                        DigiReelFee=v.get("DigiReelFee")
+                    )
+                )
+
+            # Build Parameters (optional)
+            params_raw = p.get("Parameters")
+            parameters = None
+            if params_raw:
+                parameters = []
+                for param in params_raw:
+                    parameters.append(
+                        ParameterValue(
+                            ParameterId=int(param.get("ParameterId", 0)),
+                            ParameterText=param.get("ParameterText", ""),
+                            ParameterType=param.get("ParameterType", ""),
+                            ValueId=str(param.get("ValueId", "")),
+                            ValueText=param.get("ValueText", "")
+                        )
+                    )
+
+            # Build Category (optional)
+            category = None
+            cat_raw = p.get("Category")
+            if cat_raw:
+                category = CategoryNode(
+                    CategoryId=int(cat_raw.get("CategoryId", 0)),
+                    ParentId=int(cat_raw.get("ParentId", 0)),
+                    Name=cat_raw.get("Name", ""),
+                    ProductCount=int(cat_raw.get("ProductCount", 0)),
+                    NewProductCount=int(cat_raw.get("NewProductCount", 0)),
+                    ImageUrl=cat_raw.get("ImageUrl")
+                )
+
+            products_dc.append(
+                Product(
+                    Description=description,
+                    Manufacturer=manufacturer,
+                    ManufacturerProductNumber=p.get("ManufacturerProductNumber", ""),
+                    UnitPrice=float(p.get("UnitPrice", 0.0)),
+                    ProductUrl=p.get("ProductUrl", ""),
+                    ProductVariations=variations_dc,
+                    QuantityAvailable=int(p.get("QuantityAvailable", 0)),
+                    ProductStatus=product_status,
+                    BackOrderNotAllowed=bool(p.get("BackOrderNotAllowed", False)),
+                    NormallyStocking=bool(p.get("NormallyStocking", False)),
+                    Discontinued=bool(p.get("Discontinued", False)),
+                    EndOfLife=bool(p.get("EndOfLife", False)),
+                    Ncnr=bool(p.get("Ncnr", False)),
+                    DatasheetUrl=p.get("DatasheetUrl"),
+                    PhotoUrl=p.get("PhotoUrl"),
+                    PrimaryVideoUrl=p.get("PrimaryVideoUrl"),
+                    Parameters=parameters,
+                    Category=category,
+                    BaseProductNumber=p.get("BaseProductNumber"),
+                    DateLastBuyChance=p.get("DateLastBuyChance"),
+                    ManufacturerLeadWeeks=p.get("ManufacturerLeadWeeks"),
+                    ManufacturerPublicQuantity=p.get("ManufacturerPublicQuantity")
+                )
+            )
+
+        # Return dict with pagination metadata
+        # (dataclass doesn't support the new pagination fields)
+        return {
+            "cache_key": key,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": offset + limit < total,
+            "ProductsCount": products_count,
+            "Products": [vars(p) for p in products_dc]  # Convert dataclasses to dicts
+        }
+
+    except Exception as e:
+        return {
+            "error": {
+                "type": "KeywordSearchSchemaBuildError",
+                "code": "SCHEMA_BUILD_FAILED",
+                "message": str(e),
+                "keywords": keywords
+            },
+            "cache_key": key,
+            "total": 0,
+            "offset": offset,
+            "limit": limit,
+            "has_more": False,
+            "ProductsCount": 0,
+            "Products": []
+        }
+
+
 def register_product_tools(mcp):
     """Register Product Search API MCP tools."""
 
@@ -385,360 +757,18 @@ def register_product_tools(mcp):
                                   cache_key=page1["cache_key"], jmespath_query=q)
             # Returns next 50 items from the same filtered set
         """
-        # Validate parameters
-        if limit < 1 or limit > 1000:
-            return {
-                "error": "limit must be between 1 and 1000",
-                "cache_key": "",
-                "total": 0,
-                "offset": 0,
-                "limit": limit,
-                "has_more": False,
-                "ProductsCount": 0,
-                "Products": []
-            }
-
-        if offset < 0:
-            return {
-                "error": "offset must be non-negative",
-                "cache_key": "",
-                "total": 0,
-                "offset": 0,
-                "limit": limit,
-                "has_more": False,
-                "ProductsCount": 0,
-                "Products": []
-            }
-
-        # Get or fetch data
-        all_products = []
-        key = ""
-
-        if cache_key:
-            # Try to use cached data
-            entry = search_cache.get(cache_key)
-            if entry:
-                all_products = entry.data
-                key = cache_key
-            else:
-                # Cache miss - will fetch fresh below
-                cache_key = None
-
-        if not cache_key:
-            # Fetch fresh data from DigiKey API
-            url = f"{API_BASE}/products/v4/search/keyword"
-            headers = _get_headers()
-
-            # Build base request body
-            body = {
-                "Keywords": keywords,
-                "Limit": 50  # Request maximum per page
-            }
-
-            if manufacturer_id:
-                body["ManufacturerId"] = manufacturer_id
-            if category_id:
-                body["CategoryId"] = category_id
-            if search_options:
-                body["SearchOptionList"] = search_options.split(",")
-
-            if sort_field:
-                body["SortOptions"] = {
-                    "Field": sort_field,
-                    "SortOrder": sort_order
-                }
-
-            # Page through all results
-            api_offset = 0
-            max_pages = 100  # Safety limit (5000 products max)
-
-            while len(all_products) < 5000 and api_offset < max_pages * 50:
-                # Set offset for pagination
-                body["Offset"] = api_offset
-
-                # Make API request
-                page_response = _make_request("POST", url, headers, body, use_user_token=False)
-
-                # Extract products from this page
-                page_products = page_response.get("Products", [])
-
-                # If no products returned, we've reached the end
-                if not page_products:
-                    break
-
-                # Add products to our collection
-                all_products.extend(page_products)
-
-                # If we got fewer than 50 products, we've reached the end
-                if len(page_products) < 50:
-                    break
-
-                # Move to next page
-                api_offset += 50
-
-            # Store in cache
-            key = search_cache.create(all_products)
-
-        # Build a response structure with all products (for JMESPath processing)
-        response = {
-            "Products": all_products,
-            "ProductsCount": len(all_products)
-        }
-
-        # Default JMESPath query that extracts commonly used fields
-        default_query = (
-            '{ProductsCount: ProductsCount, Products: Products[].{'
-            'DigiKeyPartNumber: ProductVariations[0].DigiKeyProductNumber,'
-            'ManufacturerPartNumber: ManufacturerProductNumber,'
-            'Manufacturer: Manufacturer.Name,'
-            'Description: Description.ProductDescription,'
-            'UnitPrice: UnitPrice,'
-            'QuantityAvailable: QuantityAvailable,'
-            'MinimumOrderQuantity: ProductVariations[0].MinimumOrderQuantity,'
-            'ProductStatus: ProductStatus.Status,'
-            'ProductUrl: ProductUrl,'
-            'DatasheetUrl: DatasheetUrl,'
-            'PhotoUrl: PhotoUrl,'
-            'InStock: (QuantityAvailable > `0`),'
-            'Pricing: ProductVariations[0].StandardPricing}}'
+        return _keyword_search_impl(
+            keywords=keywords,
+            limit=limit,
+            offset=offset,
+            cache_key=cache_key,
+            manufacturer_id=manufacturer_id,
+            category_id=category_id,
+            search_options=search_options,
+            sort_field=sort_field,
+            sort_order=sort_order,
+            jmespath_query=jmespath_query
         )
-
-        # Apply JMESPath query if provided or use default
-        query_to_use = jmespath_query or default_query
-        try:
-            filtered = search_with_custom_functions(query_to_use, response)
-            if filtered is not None:
-                # If using default query, filtered will have Products array
-                if isinstance(filtered, dict) and "Products" in filtered:
-                    # Get products list for pagination
-                    products_list = filtered.get("Products", [])
-                    total = len(products_list)
-
-                    # Apply pagination to filtered results
-                    paginated_products = products_list[offset:offset + limit]
-
-                    # Build paginated response
-                    filtered["cache_key"] = key
-                    filtered["total"] = total
-                    filtered["offset"] = offset
-                    filtered["limit"] = limit
-                    filtered["has_more"] = offset + limit < total
-                    filtered["Products"] = paginated_products
-                    filtered["ProductsCount"] = len(paginated_products)
-
-                    return filtered
-                else:
-                    # Custom query returned non-standard structure
-                    # Wrap it with pagination metadata
-                    if isinstance(filtered, list):
-                        # Query returned a list directly
-                        total = len(filtered)
-                        paginated = filtered[offset:offset + limit]
-                        return {
-                            "cache_key": key,
-                            "total": total,
-                            "offset": offset,
-                            "limit": limit,
-                            "has_more": offset + limit < total,
-                            "ProductsCount": len(paginated),
-                            "Products": paginated
-                        }
-                    else:
-                        # Query returned an object or scalar - preserve it
-                        result = {
-                            "cache_key": key,
-                            "total": 1,
-                            "offset": 0,
-                            "limit": limit,
-                            "has_more": False
-                        }
-                        # Merge the custom result into the response
-                        if isinstance(filtered, dict):
-                            result.update(filtered)
-                        else:
-                            result["data"] = filtered
-                        return result
-        except Exception:
-            # Fall back to schema build with error metadata
-            pass
-
-        # Build dataclass response according to schema, preserving extra fields
-        try:
-            raw_products = response.get("Products", [])
-            total = len(raw_products)
-
-            # Apply pagination
-            paginated_products = raw_products[offset:offset + limit]
-            products_count = len(paginated_products)
-
-            products_dc: List[Product] = []
-            for p in paginated_products:
-                # Build Description
-                desc_raw = p.get("Description", {})
-                description = Description(
-                    ProductDescription=desc_raw.get("ProductDescription", ""),
-                    DetailedDescription=desc_raw.get("DetailedDescription")
-                )
-
-                # Build Manufacturer
-                mfr_raw = p.get("Manufacturer", {})
-                manufacturer = Manufacturer(
-                    Id=int(mfr_raw.get("Id", 0)),
-                    Name=mfr_raw.get("Name", "")
-                )
-
-                # Build ProductStatus
-                status_raw = p.get("ProductStatus", {})
-                product_status = ProductStatus(
-                    Id=int(status_raw.get("Id", 0)),
-                    Status=status_raw.get("Status", "")
-                )
-
-                # Build ProductVariations
-                variations_raw = p.get("ProductVariations", [])
-                variations_dc = []
-                for v in variations_raw:
-                    # Build PackageType
-                    pkg_raw = v.get("PackageType", {})
-                    package_type = PackageType(
-                        Id=int(pkg_raw.get("Id", 0)),
-                        Name=pkg_raw.get("Name", "")
-                    )
-
-                    # Build Supplier (optional)
-                    supplier = None
-                    supplier_raw = v.get("Supplier")
-                    if supplier_raw:
-                        supplier = Supplier(
-                            Id=int(supplier_raw.get("Id", 0)),
-                            Name=supplier_raw.get("Name", "")
-                        )
-
-                    # Build StandardPricing
-                    std_pricing_raw = v.get("StandardPricing", [])
-                    std_pricing_dc = []
-                    for tier in std_pricing_raw:
-                        std_pricing_dc.append(
-                            PricingTier(
-                                BreakQuantity=int(tier.get("BreakQuantity", 0)),
-                                UnitPrice=float(tier.get("UnitPrice", 0.0)),
-                                TotalPrice=float(tier.get("TotalPrice", 0.0))
-                            )
-                        )
-
-                    # Build MyPricing
-                    my_pricing_raw = v.get("MyPricing", [])
-                    my_pricing_dc = []
-                    for tier in my_pricing_raw:
-                        my_pricing_dc.append(
-                            PricingTier(
-                                BreakQuantity=int(tier.get("BreakQuantity", 0)),
-                                UnitPrice=float(tier.get("UnitPrice", 0.0)),
-                                TotalPrice=float(tier.get("TotalPrice", 0.0))
-                            )
-                        )
-
-                    variations_dc.append(
-                        ProductVariation(
-                            DigiKeyProductNumber=v.get("DigiKeyProductNumber", ""),
-                            PackageType=package_type,
-                            StandardPricing=std_pricing_dc,
-                            MyPricing=my_pricing_dc,
-                            MarketPlace=bool(v.get("MarketPlace", False)),
-                            QuantityAvailableforPackageType=int(v.get("QuantityAvailableforPackageType", 0)),
-                            MinimumOrderQuantity=int(v.get("MinimumOrderQuantity", 0)),
-                            StandardPackage=int(v.get("StandardPackage", 0)),
-                            Supplier=supplier,
-                            TariffActive=v.get("TariffActive"),
-                            MaxQuantityForDistribution=v.get("MaxQuantityForDistribution"),
-                            DigiReelFee=v.get("DigiReelFee")
-                        )
-                    )
-
-                # Build Parameters (optional)
-                params_raw = p.get("Parameters")
-                parameters = None
-                if params_raw:
-                    parameters = []
-                    for param in params_raw:
-                        parameters.append(
-                            ParameterValue(
-                                ParameterId=int(param.get("ParameterId", 0)),
-                                ParameterText=param.get("ParameterText", ""),
-                                ParameterType=param.get("ParameterType", ""),
-                                ValueId=str(param.get("ValueId", "")),
-                                ValueText=param.get("ValueText", "")
-                            )
-                        )
-
-                # Build Category (optional)
-                category = None
-                cat_raw = p.get("Category")
-                if cat_raw:
-                    category = CategoryNode(
-                        CategoryId=int(cat_raw.get("CategoryId", 0)),
-                        ParentId=int(cat_raw.get("ParentId", 0)),
-                        Name=cat_raw.get("Name", ""),
-                        ProductCount=int(cat_raw.get("ProductCount", 0)),
-                        NewProductCount=int(cat_raw.get("NewProductCount", 0)),
-                        ImageUrl=cat_raw.get("ImageUrl")
-                    )
-
-                products_dc.append(
-                    Product(
-                        Description=description,
-                        Manufacturer=manufacturer,
-                        ManufacturerProductNumber=p.get("ManufacturerProductNumber", ""),
-                        UnitPrice=float(p.get("UnitPrice", 0.0)),
-                        ProductUrl=p.get("ProductUrl", ""),
-                        ProductVariations=variations_dc,
-                        QuantityAvailable=int(p.get("QuantityAvailable", 0)),
-                        ProductStatus=product_status,
-                        BackOrderNotAllowed=bool(p.get("BackOrderNotAllowed", False)),
-                        NormallyStocking=bool(p.get("NormallyStocking", False)),
-                        Discontinued=bool(p.get("Discontinued", False)),
-                        EndOfLife=bool(p.get("EndOfLife", False)),
-                        Ncnr=bool(p.get("Ncnr", False)),
-                        DatasheetUrl=p.get("DatasheetUrl"),
-                        PhotoUrl=p.get("PhotoUrl"),
-                        PrimaryVideoUrl=p.get("PrimaryVideoUrl"),
-                        Parameters=parameters,
-                        Category=category,
-                        BaseProductNumber=p.get("BaseProductNumber"),
-                        DateLastBuyChance=p.get("DateLastBuyChance"),
-                        ManufacturerLeadWeeks=p.get("ManufacturerLeadWeeks"),
-                        ManufacturerPublicQuantity=p.get("ManufacturerPublicQuantity")
-                    )
-                )
-
-            # Return dict with pagination metadata
-            # (dataclass doesn't support the new pagination fields)
-            return {
-                "cache_key": key,
-                "total": total,
-                "offset": offset,
-                "limit": limit,
-                "has_more": offset + limit < total,
-                "ProductsCount": products_count,
-                "Products": [vars(p) for p in products_dc]  # Convert dataclasses to dicts
-            }
-
-        except Exception as e:
-            return {
-                "error": {
-                    "type": "KeywordSearchSchemaBuildError",
-                    "code": "SCHEMA_BUILD_FAILED",
-                    "message": str(e),
-                    "keywords": keywords
-                },
-                "cache_key": key,
-                "total": 0,
-                "offset": offset,
-                "limit": limit,
-                "has_more": False,
-                "ProductsCount": 0,
-                "Products": []
-            }
 
     @mcp.tool()
     def product_details(

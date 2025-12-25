@@ -267,6 +267,259 @@ class PartsListResponse:
     TotalParts: int
 
 
+# Implementation functions - callable by both MCP tools and bulk executor
+
+def _get_all_lists_impl(customer_id: CustomerId = "0") -> Dict[str, Any]:
+    """Core implementation of get_all_lists."""
+    _require_user_auth()
+    url = f"{API_BASE}/mylists/v1/lists"
+    headers = _get_headers(customer_id, use_user_token=True)
+    result = _make_request("GET", url, headers, use_user_token=True)
+    # Wrap list in dict for FastMCP compatibility
+    if isinstance(result, list):
+        return {"lists": result}
+    return result
+
+
+def _create_list_impl(
+    list_name: str,
+    tags: Optional[List[str]] = None,
+    source: Optional[ListSource] = None,
+    customer_id: CustomerId = "0"
+) -> str:
+    """Core implementation of create_list."""
+    _require_user_auth()
+
+    if not list_name or not list_name.strip():
+        raise ValueError("list_name cannot be empty")
+
+    url = f"{API_BASE}/mylists/v1/lists"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    body = _to_dict_excluding_none({
+        "ListName": list_name,
+        "Tags": tags,
+        "Source": source
+    })
+
+    return _make_request("POST", url, headers, body, use_user_token=True)
+
+
+def _get_list_by_id_impl(
+    list_id: ListId,
+    include_parts: bool = False,
+    customer_id: CustomerId = "0"
+) -> Dict[str, Any]:
+    """Core implementation of get_list_by_id."""
+    _require_user_auth()
+
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    if include_parts:
+        url += "?includeParts=true"
+
+    return _make_request("GET", url, headers, use_user_token=True)
+
+
+def _update_list_name_impl(
+    list_id: ListId,
+    new_name: str,
+    customer_id: CustomerId = "0"
+) -> None:
+    """Core implementation of update_list_name."""
+    _require_user_auth()
+
+    if not new_name or not new_name.strip():
+        raise ValueError("new_name cannot be empty")
+
+    # API expects both listId and listName in the path
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}/listName/{new_name}"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    return _make_request("PUT", url, headers, use_user_token=True)
+
+
+def _delete_list_impl(
+    list_id: ListId,
+    customer_id: CustomerId = "0"
+) -> None:
+    """Core implementation of delete_list."""
+    _require_user_auth()
+
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    return _make_request("DELETE", url, headers, use_user_token=True)
+
+
+def _get_parts_by_list_id_impl(
+    list_id: ListId,
+    start_index: Optional[int] = None,
+    limit: Optional[int] = None,
+    assemblies: Optional[int] = None,
+    include_attrition: bool = False,
+    customer_id: CustomerId = "0",
+    jmespath_query: Optional[str] = None
+) -> Union[PartsListResponse, Dict[str, Any]]:
+    """Core implementation of get_parts_by_list_id."""
+    _require_user_auth()
+
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    params = []
+    if start_index is not None:
+        params.append(f"startIndex={start_index}")
+    if limit is not None:
+        params.append(f"limit={limit}")
+    if assemblies is not None:
+        params.append(f"assemblies={assemblies}")
+    if include_attrition:
+        params.append("includeAttrition=true")
+
+    if params:
+        url += "?" + "&".join(params)
+
+    response = _make_request("GET", url, headers, use_user_token=True)
+
+    # Default JMESPath query
+    default_query = """{
+        TotalParts: TotalParts,
+        PartsList: PartsList[].{
+            UniqueId: UniqueId,
+            PartId: PartId,
+            DigiKeyPartNumber: DigiKeyPartNumber,
+            ManufacturerPartNumber: ManufacturerPartNumber,
+            Manufacturer: Manufacturer,
+            Description: Description,
+            CustomerReference: CustomerReference,
+            ReferenceDesignator: ReferenceDesignator,
+            Notes: Notes,
+            RequestedQuantity: Quantities[0].QuantityRequested,
+            QuantityAvailable: QuantityAvailable,
+            UnitPrice: Quantities[0].PackOptions[0].CalculatedUnitPrice,
+            ExtendedPrice: Quantities[0].PackOptions[0].ExtendedPrice
+        }
+    }"""
+
+    query = jmespath_query if jmespath_query else default_query
+
+    try:
+        filtered = search_with_custom_functions(query, response)
+        return filtered if filtered is not None else response
+    except Exception:
+        return response
+
+
+def _add_parts_to_list_impl(
+    list_id: ListId,
+    parts: List[Dict[str, Any]],
+    index: int = 0,
+    customer_id: CustomerId = "0"
+) -> Dict[str, Any]:
+    """Core implementation of add_parts_to_list."""
+    _require_user_auth()
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    # Add index query parameter if specified
+    if index != 0:
+        url += f"?index={index}"
+
+    # Convert parts to API format using RequestedPart dataclass
+    parts_list = []
+    for part_data in parts:
+        # Handle PartQuantity objects if present
+        quantities = None
+        if "quantities" in part_data and part_data["quantities"]:
+            quantities = [
+                PartQuantity(
+                    selected_pack_type=q.get("selected_pack_type"),
+                    quantity=q.get("quantity"),
+                    target_price=q.get("target_price")
+                )
+                for q in part_data["quantities"]
+            ]
+
+        requested_part = RequestedPart(
+            part_id=part_data.get("part_id"),
+            requested_part_number=part_data.get("requested_part_number"),
+            manufacturer_name=part_data.get("manufacturer_name"),
+            customer_reference=part_data.get("customer_reference"),
+            reference_designator=part_data.get("reference_designator"),
+            notes=part_data.get("notes"),
+            selected_quantity_index=part_data.get("selected_quantity_index"),
+            attrition=part_data.get("attrition"),
+            quantities=quantities
+        )
+        parts_list.append(requested_part.to_dict())
+
+    # Send the array directly as the body (not wrapped in an object)
+    result = _make_request("POST", url, headers, parts_list, use_user_token=True)
+    # Wrap list in dict for FastMCP compatibility
+    if isinstance(result, list):
+        return {"part_ids": result}
+    return result
+
+
+def _get_part_from_list_impl(
+    list_id: ListId,
+    part_id: PartId,
+    customer_id: CustomerId = "0"
+) -> Dict[str, Any]:
+    """Core implementation of get_part_from_list."""
+    _require_user_auth()
+
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    return _make_request("GET", url, headers, use_user_token=True)
+
+
+def _update_part_in_list_impl(
+    list_id: ListId,
+    part_id: PartId,
+    part_data: Dict[str, Any],
+    customer_id: CustomerId = "0"
+) -> Dict[str, Any]:
+    """Core implementation of update_part_in_list."""
+    _require_user_auth()
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    # Convert snake_case to PascalCase for API
+    api_data = {}
+    field_mapping = {
+        "customer_reference": "CustomerReference",
+        "reference_designator": "ReferenceDesignator",
+        "notes": "Notes",
+        "selected_quantity_index": "SelectedQuantityIndex",
+        "attrition": "Attrition",
+        "quantities": "Quantities"
+    }
+
+    for key, value in part_data.items():
+        api_key = field_mapping.get(key, key)
+        api_data[api_key] = value
+
+    return _make_request("PUT", url, headers, api_data, use_user_token=True)
+
+
+def _delete_part_from_list_impl(
+    list_id: ListId,
+    part_id: PartId,
+    customer_id: CustomerId = "0"
+) -> None:
+    """Core implementation of delete_part_from_list."""
+    _require_user_auth()
+
+    url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
+    headers = _get_headers(customer_id, use_user_token=True)
+
+    return _make_request("DELETE", url, headers, use_user_token=True)
+
+
 def register_mylists_tools(mcp):
     """Register MyLists API MCP tools."""
 
@@ -296,14 +549,7 @@ def register_mylists_tools(mcp):
             ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails
         """
-        _require_user_auth()
-        url = f"{API_BASE}/mylists/v1/lists"
-        headers = _get_headers(customer_id, use_user_token=True)
-        result = _make_request("GET", url, headers, use_user_token=True)
-        # Wrap list in dict for FastMCP compatibility (structured_content must be dict)
-        if isinstance(result, list):
-            return {"lists": result}
-        return result
+        return _get_all_lists_impl(customer_id)
 
     @mcp.tool()
     def create_list(
@@ -338,21 +584,7 @@ def register_mylists_tools(mcp):
         Example:
             list_id = create_list("My Components", tags=["resistors", "capacitors"])
         """
-        _require_user_auth()
-
-        if not list_name or not list_name.strip():
-            raise ValueError("list_name cannot be empty")
-
-        url = f"{API_BASE}/mylists/v1/lists"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        body = _to_dict_excluding_none({
-            "ListName": list_name,
-            "Tags": tags,
-            "Source": source
-        })
-
-        return _make_request("POST", url, headers, body, use_user_token=True)
+        return _create_list_impl(list_name, tags, source, customer_id)
 
     @mcp.tool()
     def get_list_by_id(
@@ -389,14 +621,7 @@ def register_mylists_tools(mcp):
             ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails (e.g., 404 if list not found)
         """
-        _require_user_auth()
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        if include_parts:
-            url += "?includePartsList=true"
-
-        return _make_request("GET", url, headers, use_user_token=True)
+        return _get_list_by_id_impl(list_id, include_parts, customer_id)
 
     @mcp.tool()
     def update_list_name(
@@ -428,16 +653,7 @@ def register_mylists_tools(mcp):
         Example:
             update_list_name("abc123", "My Renamed List")
         """
-        _require_user_auth()
-
-        if not new_name or not new_name.strip():
-            raise ValueError("new_name cannot be empty")
-
-        # API expects both listId and listName in the path
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}/listName/{new_name}"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        return _make_request("PUT", url, headers, use_user_token=True)
+        return _update_list_name_impl(list_id, new_name, customer_id)
 
     @mcp.tool()
     def delete_list(
@@ -467,12 +683,7 @@ def register_mylists_tools(mcp):
         Note:
             The deletion cannot be undone once confirmed.
         """
-        _require_user_auth()
-
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        return _make_request("DELETE", url, headers, use_user_token=True)
+        return _delete_list_impl(list_id, customer_id)
 
     @mcp.tool()
     def get_parts_by_list_id(
@@ -636,243 +847,9 @@ def register_mylists_tools(mcp):
             q = 'PartsList[].{Part: DigiKeyPartNumber, Qty: int(regex_replace("[^0-9]", "", RequestedQuantity))}'
             result = get_parts_by_list_id("abc123", jmespath_query=q)
         """
-        _require_user_auth()
-
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        params = []
-        if start_index is not None:
-            params.append(f"startIndex={start_index}")
-        if limit is not None:
-            params.append(f"limit={limit}")
-        if assemblies is not None:
-            params.append(f"assemblies={assemblies}")
-        if include_attrition:
-            params.append("includeAttrition=true")
-
-        if params:
-            url += "?" + "&".join(params)
-
-        response = _make_request("GET", url, headers, use_user_token=True)
-
-        # If a JMESPath query is provided or default selection should be applied,
-        # return the filtered dict directly.
-        default_query = (
-            '{TotalParts: TotalParts, PartsList: PartsList[].{'
-            'UniqueId: UniqueId,'
-            'PartId: PartId,'
-            'ManufacturerPartNumber: ManufacturerPartNumber,'
-            'Manufacturer: Manufacturer,'
-            'Description: Description,'
-            'Availability: Availability,'
-            'PartStatus: PartStatus,'
-            'RequestedQuantity: Quantities[].QuantityRequested,'
-            'PackQuantity: Quantities[].PackOptions[].Quantity,'
-            'PackType: Quantities[].PackOptions[].PackType,'
-            'DigiKeyPartNumber: DigiKeyPartNumber,'
-            'UnitPrice: Quantities[].PackOptions[].CalculatedUnitPrice,'
-            'ExtendedPrice: Quantities[].PackOptions[].ExtendedPrice,'
-            'MinOrderQty: MinOrderQty,'
-            'RequestedPartNumber: RequestedPartNumber,'
-            'Htsus: Htsus,'
-            'Notes: Notes,'
-            'CountryOfOrigin: CountryOfOrigin,'
-            'OriginalPartNumber: OriginalPartNumber,'
-            'ImageUrl: ImageUrl}}'
+        return _get_parts_by_list_id_impl(
+            list_id, start_index, limit, assemblies, include_attrition, customer_id, jmespath_query
         )
-
-        query_to_use = jmespath_query or default_query
-        try:
-            filtered = search_with_custom_functions(query_to_use, response)
-            if filtered is not None:
-                return filtered
-        except Exception:
-            # Fall back to schema build with error metadata
-            pass
-
-        # Build dataclass response according to schema, preserving extra fields
-        try:
-            raw_parts = response.get("PartsList", [])
-            total_parts = response.get("TotalParts", 0)
-
-            parts_dc: List[Part] = []
-            for p in raw_parts:
-                # Quantities
-                quantities_dc: List[Quantity] = []
-                for q in p.get("Quantities", []):
-                    pack_options_raw = q.get("PackOptions") or []
-                    pack_options_dc = []
-                    for po in pack_options_raw:
-                        pack_options_dc.append(
-                            PackOption(
-                                PartId=int(po.get("PartId", 0)),
-                                DigiKeyPartNumber=po.get("DigiKeyPartNumber", ""),
-                                ManufacturerPartNumber=po.get("ManufacturerPartNumber", ""),
-                                Quantity=int(po.get("Quantity", 0)),
-                                PackType=po.get("PackType", ""),
-                                QuantityAvailable=int(po.get("QuantityAvailable", 0)),
-                                MinimumOrderQuantity=int(po.get("MinimumOrderQuantity", 0)),
-                                CalculatedUnitPrice=float(po.get("CalculatedUnitPrice", 0.0)),
-                                ExtendedPrice=float(po.get("ExtendedPrice", 0.0)),
-                                BreakPrice=float(po.get("BreakPrice", 0.0)),
-                                BreakQuantity=int(po.get("BreakQuantity", 0)),
-                                IsUpsell=bool(po.get("IsUpsell", False)),
-                                ValueAdditionalFee=float(po.get("ValueAdditionalFee", 0.0)),
-                                SubPackOptions=po.get("SubPackOptions", []) or [],
-                                FormattedUnitPrice=po.get("FormattedUnitPrice", ""),
-                                FormattedExtendedPrice=po.get("FormattedExtendedPrice", ""),
-                            )
-                        )
-
-                    quantities_dc.append(
-                        Quantity(
-                            QuantityRequested=int(q.get("QuantityRequested", 0)),
-                            CalculatedQuantity=int(q.get("CalculatedQuantity", 0)),
-                            TargetPrice=(q.get("TargetPrice") if q.get("TargetPrice") is not None else None),
-                            SelectedPackType=q.get("SelectedPackType", ""),
-                            SelectedSubPackType=q.get("SelectedSubPackType", ""),
-                            IsInactive=bool(q.get("IsInactive", False)),
-                            SelectedPackOptionIndex=int(q.get("SelectedPackOptionIndex", 0)),
-                            SelectedSubPackOptionIndex=int(q.get("SelectedSubPackOptionIndex", 0)),
-                            PackOptions=pack_options_dc or None,
-                        )
-                    )
-
-                flags_raw = p.get("Flags", {})
-                flags_dc = Flags(
-                    NonStock=bool(flags_raw.get("NonStock", False)),
-                    IsNCNR=bool(flags_raw.get("IsNCNR", False)),
-                    IsSDS=bool(flags_raw.get("IsSDS", False)),
-                    IsValueAdd=bool(flags_raw.get("IsValueAdd", False)),
-                    IsMatched=bool(flags_raw.get("IsMatched", False)),
-                    IsMarketPlace=bool(flags_raw.get("IsMarketPlace", False)),
-                    BoNotAllowed=bool(flags_raw.get("BoNotAllowed", False)),
-                    DisplayRegularLeadTime=bool(flags_raw.get("DisplayRegularLeadTime", False)),
-                    DisplayCheckActiveLeadTime=bool(flags_raw.get("DisplayCheckActiveLeadTime", False)),
-                    MultipleCrefsForPart=bool(flags_raw.get("MultipleCrefsForPart", False)),
-                    MultiplePartsForCref=bool(flags_raw.get("MultiplePartsForCref", False)),
-                    IsChecked=bool(flags_raw.get("IsChecked", False)),
-                    IsEditable=bool(flags_raw.get("IsEditable", False)),
-                    IsDeniedByCountry=bool(flags_raw.get("IsDeniedByCountry", False)),
-                    IsDeniedByCurrency=bool(flags_raw.get("IsDeniedByCurrency", False)),
-                    IsDeniedByCustomerId=bool(flags_raw.get("IsDeniedByCustomerId", False)),
-                )
-
-                # Substitutes
-                subs_raw = p.get("Substitutes") or []
-                substitutes_dc = []
-                for s in subs_raw:
-                    substitutes_dc.append(
-                        Substitute(
-                            PartId=int(s.get("PartId", 0)),
-                            DigiKeyPartNumber=s.get("DigiKeyPartNumber", ""),
-                            Manufacturer=s.get("Manufacturer", ""),
-                            ManufacturerPartNumber=s.get("ManufacturerPartNumber", ""),
-                            Description=s.get("Description", ""),
-                            PartDetailUrl=s.get("PartDetailUrl", ""),
-                            SubstituteType=s.get("SubstituteType", ""),
-                            MinimumOrderQuantity=int(s.get("MinimumOrderQuantity", 0)),
-                            QuantityAvailable=str(s.get("QuantityAvailable", "")),
-                            TariffStatus=s.get("TariffStatus", ""),
-                            MasterPartId=int(s.get("MasterPartId", 0)),
-                            UnitPrice=s.get("UnitPrice", ""),
-                        )
-                    )
-
-                # AlternateParts
-                alt_raw = p.get("AlternateParts") or []
-                alt_dc = []
-                for a in alt_raw:
-                    alt_dc.append(
-                        AlternatePart(
-                            PartId=int(a.get("PartId", 0)),
-                            DigiKeyPartNumber=a.get("DigiKeyPartNumber", ""),
-                            Manufacturer=a.get("Manufacturer", ""),
-                            ManufacturerPartNumber=a.get("ManufacturerPartNumber", ""),
-                            Description=a.get("Description", ""),
-                            PartDetailUrl=a.get("PartDetailUrl", ""),
-                            SubstituteType=a.get("SubstituteType", ""),
-                            MinimumOrderQuantity=int(a.get("MinimumOrderQuantity", 0)),
-                            QuantityAvailable=str(a.get("QuantityAvailable", "")),
-                            TariffStatus=a.get("TariffStatus", ""),
-                            MasterPartId=int(a.get("MasterPartId", 0)),
-                            UnitPrice=a.get("UnitPrice", ""),
-                        )
-                    )
-
-                # PartsAvailableForCref
-                pac_raw = p.get("PartsAvailableForCref") or []
-                pac_dc = []
-                for item in pac_raw:
-                    pac_dc.append(
-                        PartsAvailableForCrefItem(
-                            ManufacturerPartnumber=item.get("ManufacturerPartnumber", ""),
-                            Manufacturer=item.get("Manufacturer", ""),
-                            MinimumOrderQuantity=int(item.get("MinimumOrderQuantity", 0)),
-                            Description=item.get("Description", ""),
-                            QuantityAvailable=int(item.get("QuantityAvailable", 0)),
-                        )
-                    )
-
-                parts_dc.append(
-                    Part(
-                        PartId=int(p.get("PartId", 0)),
-                        UniqueId=p.get("UniqueId", ""),
-                        CustomerReference=p.get("CustomerReference", ""),
-                        ReferenceDesignator=p.get("ReferenceDesignator", ""),
-                        Notes=p.get("Notes", ""),
-                        MinOrderQty=int(p.get("MinOrderQty", 0)),
-                        MaxOrderQty=int(p.get("MaxOrderQty", 0)),
-                        OriginalPartNumber=p.get("OriginalPartNumber", ""),
-                        RequestedPartNumber=p.get("RequestedPartNumber", ""),
-                        DigiKeyPartNumber=p.get("DigiKeyPartNumber", ""),
-                        ManufacturerPartNumber=p.get("ManufacturerPartNumber", ""),
-                        RequestedManufacturerName=p.get("RequestedManufacturerName", ""),
-                        Manufacturer=p.get("Manufacturer", ""),
-                        Description=p.get("Description", ""),
-                        PartStatus=p.get("PartStatus", ""),
-                        PartStatusCode=str(p.get("PartStatusCode", "")),
-                        Availability=p.get("Availability"),
-                        TariffCode=str(p.get("TariffCode", "")),
-                        QuantityAvailable=int(p.get("QuantityAvailable", 0)),
-                        SelectedQuantityIndex=int(p.get("SelectedQuantityIndex", 0)),
-                        Attrition=int(p.get("Attrition", 0)),
-                        Quantities=quantities_dc,
-                        VendorLeadWeeks=int(p.get("VendorLeadWeeks", 0)),
-                        PartDetailUrl=p.get("PartDetailUrl", ""),
-                        PrimaryDatasheetUrl=p.get("PrimaryDatasheetUrl", ""),
-                        ImageUrl=p.get("ImageUrl", ""),
-                        ThumbnailUrl=p.get("ThumbnailUrl", ""),
-                        MarketPlaceSupplierLink=p.get("MarketPlaceSupplierLink", ""),
-                        SupplierName=p.get("SupplierName", ""),
-                        Substitutes=substitutes_dc or None,
-                        AlternateParts=alt_dc,
-                        Flags=flags_dc,
-                        ReachStatus=p.get("ReachStatus", ""),
-                        RohsStatusMessage=p.get("RohsStatusMessage", ""),
-                        Eccn=p.get("Eccn", ""),
-                        Htsus=p.get("Htsus", ""),
-                        CountryOfOrigin=p.get("CountryOfOrigin", ""),
-                        EnvironmentalDocs=p.get("EnvironmentalDocs", {}) or {},
-                        Category=p.get("Category", ""),
-                        PartsAvailableForCref=pac_dc,
-                        CrefsAvailableForPart=[str(x) for x in (p.get("CrefsAvailableForPart", []) or [])],
-                    )
-                )
-
-            result_dc = PartsListResponse(PartsList=parts_dc, TotalParts=int(total_parts))
-            return result_dc
-        except Exception as e:
-            return {
-                "error": {
-                    "type": "PartsListSchemaBuildError",
-                    "code": "SCHEMA_BUILD_FAILED",
-                    "message": str(e),
-                    "listId": list_id,
-                    "originalResponse": response
-                }
-            }
 
     @mcp.tool()
     def add_parts_to_list(
@@ -934,48 +911,7 @@ def register_mylists_tools(mcp):
             )
             part_ids = result["part_ids"]
         """
-        _require_user_auth()
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        # Add index query parameter if specified
-        if index != 0:
-            url += f"?index={index}"
-
-        # Convert parts to API format using RequestedPart dataclass
-        parts_list = []
-        for part_data in parts:
-            # Handle PartQuantity objects if present
-            quantities = None
-            if "quantities" in part_data and part_data["quantities"]:
-                quantities = [
-                    PartQuantity(
-                        selected_pack_type=q.get("selected_pack_type"),
-                        quantity=q.get("quantity"),
-                        target_price=q.get("target_price")
-                    )
-                    for q in part_data["quantities"]
-                ]
-
-            requested_part = RequestedPart(
-                part_id=part_data.get("part_id"),
-                requested_part_number=part_data.get("requested_part_number"),
-                manufacturer_name=part_data.get("manufacturer_name"),
-                customer_reference=part_data.get("customer_reference"),
-                reference_designator=part_data.get("reference_designator"),
-                notes=part_data.get("notes"),
-                selected_quantity_index=part_data.get("selected_quantity_index"),
-                attrition=part_data.get("attrition"),
-                quantities=quantities
-            )
-            parts_list.append(requested_part.to_dict())
-
-        # Send the array directly as the body (not wrapped in an object)
-        result = _make_request("POST", url, headers, parts_list, use_user_token=True)
-        # Wrap list in dict for FastMCP compatibility (structured_content must be dict)
-        if isinstance(result, list):
-            return {"part_ids": result}
-        return result
+        return _add_parts_to_list_impl(list_id, parts, index, customer_id)
 
     @mcp.tool()
     def get_part_from_list(
@@ -1012,11 +948,7 @@ def register_mylists_tools(mcp):
             ValueError: If user is not authenticated
             requests.HTTPError: If the API request fails (e.g., 404 if part not found)
         """
-        _require_user_auth()
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        return _make_request("GET", url, headers, use_user_token=True)
+        return _get_part_from_list_impl(list_id, part_id, customer_id)
 
     @mcp.tool()
     def update_part_in_list(
@@ -1067,26 +999,7 @@ def register_mylists_tools(mcp):
                 }
             )
         """
-        _require_user_auth()
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        # Convert snake_case to PascalCase for API
-        api_data = {}
-        field_mapping = {
-            "customer_reference": "CustomerReference",
-            "reference_designator": "ReferenceDesignator",
-            "notes": "Notes",
-            "selected_quantity_index": "SelectedQuantityIndex",
-            "attrition": "Attrition",
-            "quantities": "Quantities"
-        }
-
-        for key, value in part_data.items():
-            api_key = field_mapping.get(key, key)
-            api_data[api_key] = value
-
-        return _make_request("PUT", url, headers, api_data, use_user_token=True)
+        return _update_part_in_list_impl(list_id, part_id, part_data, customer_id)
 
     @mcp.tool()
     def delete_part_from_list(
@@ -1119,9 +1032,4 @@ def register_mylists_tools(mcp):
         Note:
             The deletion cannot be undone once confirmed.
         """
-        _require_user_auth()
-
-        url = f"{API_BASE}/mylists/v1/lists/{list_id}/parts/{part_id}"
-        headers = _get_headers(customer_id, use_user_token=True)
-
-        return _make_request("DELETE", url, headers, use_user_token=True)
+        return _delete_part_from_list_impl(list_id, part_id, customer_id)

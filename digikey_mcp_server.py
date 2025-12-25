@@ -7,6 +7,7 @@ from src.api.auth import initialize_user_token_from_file
 from src.tools.oauth_tools import register_oauth_tools
 from src.tools.product_tools import register_product_tools
 from src.tools.mylists_tools import register_mylists_tools
+from src.tools.bulk_operations_tools import register_bulk_operations_tools
 
 # Initialize FastMCP server
 mcp = FastMCP("DigiKey MCP Server")
@@ -15,6 +16,7 @@ mcp = FastMCP("DigiKey MCP Server")
 register_oauth_tools(mcp)
 register_product_tools(mcp)
 register_mylists_tools(mcp)
+register_bulk_operations_tools(mcp)
 
 # Initialize server
 logger.info("=== STARTING DIGIKEY MCP SERVER ===")

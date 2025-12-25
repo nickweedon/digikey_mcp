@@ -24,7 +24,9 @@
       "Bash(cat:*)",
       "WebSearch",
       "Bash(uv run pytest:*)",
-      "Bash(uv sync:*)"
+      "Bash(uv sync:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker compose:*)"
     ],
     "deny": [],
     "ask": []
